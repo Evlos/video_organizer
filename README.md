@@ -1,4 +1,4 @@
-# 🖥️ VIDEO TERMINAL
+# 🖥️ VIDEO ORGANIZER
 
 > A minimal dark-style web video manager built with Flask — browse, play, annotate, and organize your local MP4 library from any browser or iPad.
 
@@ -79,7 +79,7 @@ Then open your browser at **http://localhost:5000**
 ## 📁 Project Structure
 
 ```
-video-terminal/
+video-organizer/
 ├── app.py        # Flask backend — file listing, video streaming, deletion API
 └── data/         # Drop your .mp4 files here
 ```

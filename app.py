@@ -62,7 +62,7 @@ HTML = r"""<!DOCTYPE html>
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<title>VIDEO TERMINAL</title>
+<title>VIDEO ORGANIZER</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -150,7 +150,7 @@ HTML = r"""<!DOCTYPE html>
 <body>
 <div id="app">
   <div id="left">
-    <div id="left-header">▍ VIDEO TERMINAL // DATA</div>
+    <div id="left-header">▍ VIDEO ORGANIZER</div>
     <div id="file-list"></div>
     <div id="left-footer">
       <button id="delete-all-btn" disabled onclick="confirmDeleteAll()">⚠ PURGE</button>
