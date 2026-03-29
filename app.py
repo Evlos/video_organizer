@@ -153,7 +153,7 @@ HTML = r"""<!DOCTYPE html>
     <div id="left-header">▍ VIDEO TERMINAL // DATA</div>
     <div id="file-list"></div>
     <div id="left-footer">
-      <button id="delete-all-btn" disabled onclick="confirmDeleteAll()">⚠ 执行删除</button>
+      <button id="delete-all-btn" disabled onclick="confirmDeleteAll()">⚠ PURGE</button>
     </div>
   </div>
 
@@ -175,15 +175,15 @@ HTML = r"""<!DOCTYPE html>
       </div>
       <div id="controls-row">
         <div id="controls-left">
-          <button class="ctrl-btn danger" onclick="clearMarkers()">✕ 清除</button>
-          <button class="ctrl-btn danger" onclick="undoMarker()">↩ 撤销</button>
+          <button class="ctrl-btn danger" onclick="clearMarkers()">✕ CLEAR</button>
+          <button class="ctrl-btn danger" onclick="undoMarker()">↩ UNDO</button>
         </div>
         <div id="controls-center">
-          <button class="ctrl-btn" onclick="openRenameModal()">✎ 重命名</button>
+          <button class="ctrl-btn" onclick="openRenameModal()">✎ RENAME</button>
         </div>
         <div id="controls-right">
-          <button class="ctrl-btn" onclick="markSegment('start')">{ 开始</button>
-          <button class="ctrl-btn" onclick="markSegment('end')">结束 }</button>
+          <button class="ctrl-btn" onclick="markSegment('start')">{ Mark In</button>
+          <button class="ctrl-btn" onclick="markSegment('end')">Mark Out }</button>
         </div>
       </div>
     </div>
@@ -193,13 +193,13 @@ HTML = r"""<!DOCTYPE html>
 <!-- Rename Modal -->
 <div id="modal-overlay">
   <div id="modal">
-    <h3>✎ 重命名视频</h3>
-    <input id="modal-input" type="text" placeholder="输入前缀，例如 1b2k" autocomplete="off" spellcheck="false" />
+    <h3>✎ RENAME VIDEO</h3>
+    <input id="modal-input" type="text" placeholder="Please enter a prefix, e.g. 1b2k" autocomplete="off" spellcheck="false" />
     <div id="modal-preview"></div>
     <div id="tag-list"></div>
     <div id="modal-actions">
-      <button id="modal-cancel-btn" onclick="closeModal()">取消</button>
-      <button id="modal-confirm-btn" onclick="doRename()">重命名</button>
+      <button id="modal-cancel-btn" onclick="closeModal()">CANCEL</button>
+      <button id="modal-confirm-btn" onclick="doRename()">RENAME</button>
     </div>
   </div>
 </div>
@@ -301,7 +301,7 @@ function undoMarker() {
 
 function clearMarkers() {
   if (!markers.length) return;
-  if (!confirm('确认清除所有标记？')) return;
+  if (!confirm('Clear all markers?')) return;
   markers = [];
   renderMarkers();
   saveMarkers();
@@ -401,11 +401,11 @@ function toggleDelete(filename, btn) {
 
 function confirmDeleteAll() {
   if (!pendingDeletes.size) return;
-  if (!confirm(`确认删除以下 ${pendingDeletes.size} 个文件？\n\n${Array.from(pendingDeletes).join('\n')}`)) return;
+  if (!confirm(`Delete ${pendingDeletes.size} file(s)\n\n${Array.from(pendingDeletes).join('\n')}`)) return;
   fetch('/delete', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({files: Array.from(pendingDeletes)})
-  }).then(r=>r.json()).then(d=>{ if(d.ok){ pendingDeletes.clear(); loadFileList(); } else alert('删除失败: '+d.error); });
+  }).then(r=>r.json()).then(d=>{ if(d.ok){ pendingDeletes.clear(); loadFileList(); } else alert('Delete failed: '+d.error); });
 }
 
 function loadFileList() {
@@ -418,10 +418,10 @@ function loadFileList() {
       if (f.name===currentFile) item.classList.add('active');
       const safe = f.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       item.innerHTML = `
-        ${f.has_json ? '<span class="has-json-icon" title="有标记数据">◈</span>' : '<span style="width:16px;display:inline-block"></span>'}
+        ${f.has_json ? '<span class="has-json-icon" title="Has markers">◈</span>' : '<span style="width:16px;display:inline-block"></span>'}
         <span class="file-name">${f.name}</span>
         <span class="file-dur">${f.duration}</span>
-        <button class="trash-btn" title="标记删除" onclick="event.stopPropagation();toggleDelete('${safe}',this)">🗑</button>
+        <button class="trash-btn" title="Mark for deletion" onclick="event.stopPropagation();toggleDelete('${safe}',this)">🗑</button>
       `;
       item.addEventListener('click', ()=>loadFile(f.name));
       fileListEl.appendChild(item);
@@ -431,7 +431,7 @@ function loadFileList() {
 
 // ── Rename Modal ──────────────────────────────────────────
 function openRenameModal() {
-  if (!currentFile) { alert('请先选择一个视频文件'); return; }
+  if (!currentFile) { alert('Please select a video file first'); return; }
   modalInput.value = '';
   modalPreview.textContent = '';
   renderTagChips();
@@ -467,7 +467,7 @@ function renderTagChips() {
 
 function doRename() {
   const prefix = modalInput.value.trim();
-  if (!prefix) { alert('请输入前缀'); return; }
+  if (!prefix) { alert('Please enter a prefix'); return; }
   if (!currentFile) return;
   const newName = prefix + currentFile;
   fetch('/rename', {
@@ -487,7 +487,7 @@ function doRename() {
       player.currentTime = ct;
       if (wasPlaying) player.play();
     } else {
-      alert('重命名失败: ' + (d.error||''));
+      alert('Rename failed: ' + (d.error||''));
     }
   });
 }
@@ -585,7 +585,7 @@ def rename_file():
     if not os.path.exists(old_mp4):
         return jsonify({'ok': False, 'error': 'source not found'})
     if os.path.exists(new_mp4):
-        return jsonify({'ok': False, 'error': '目标文件已存在'})
+        return jsonify({'ok': False, 'error': 'target file already exists'})
     try:
         os.rename(old_mp4, new_mp4)
         if os.path.exists(old_json):
