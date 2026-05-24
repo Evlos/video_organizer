@@ -1,3 +1,5 @@
 __pycache__/
 data/
 *.ini
+exportplan.md
+*.xml
