@@ -227,7 +227,27 @@ progressContainer.addEventListener('touchend', () => { isDragging = false; });
 // ── Markers ───────────────────────────────────────────────
 function markSegment(type) {
   if (!player.src || !player.duration) return;
-  markers.push({ type, time: player.currentTime });
+  const currentTime = player.currentTime;
+
+  console.log(`[markSegment] type=${type} currentTime=${currentTime.toFixed(3)} markers_before=`, JSON.stringify(markers));
+
+  // 找到当前时间点之前、同类型的最后一个 marker
+  let lastSameTypeBefore = -1;
+  for (let i = markers.length - 1; i >= 0; i--) {
+    if (markers[i].type === type && markers[i].time < currentTime) {
+      lastSameTypeBefore = i;
+      break;
+    }
+  }
+
+  if (lastSameTypeBefore !== -1) {
+    console.log(`[markSegment] removing previous ${type} marker at index=${lastSameTypeBefore} time=${markers[lastSameTypeBefore].time.toFixed(3)}`);
+    markers.splice(lastSameTypeBefore, 1);
+  }
+
+  markers.push({ type, time: currentTime });
+  console.log(`[markSegment] markers_after=`, JSON.stringify(markers));
+
   renderMarkers();
   saveMarkers();
 }
