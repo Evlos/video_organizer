@@ -332,6 +332,80 @@ function loadMarkersFromFile(filename) {
 }
 
 // ── File list ─────────────────────────────────────────────
+let fileCache = []; // 本地文件列表缓存，用于乐观更新
+
+function renderFileList() {
+  fileListEl.innerHTML = '';
+  fileCache.forEach(f => {
+    const item = document.createElement('div');
+    item.className = 'file-item';
+    item.dataset.name = f.name;
+    if (f.name === currentFile) item.classList.add('active');
+    if (pendingDeletes.has(f.name)) item.classList.add('pending-delete');
+
+    const safe = f.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    item.innerHTML = `
+      ${f.has_json ? '<span class="has-json-icon" title="Has markers">◈</span>' : '<span style="width:16px;display:inline-block"></span>'}
+      <span class="file-name">${f.name}</span>
+      <span class="file-dur">${f.duration}</span>
+      <button class="trash-btn${pendingDeletes.has(f.name) ? ' marked' : ''}" title="Mark for deletion" onclick="event.stopPropagation();toggleDelete('${safe}',this)">🗑</button>
+    `;
+    item.addEventListener('click', () => loadFile(f.name));
+    fileListEl.appendChild(item);
+  });
+}
+
+function loadFileList() {
+  fetch('/files').then(r => r.json()).then(files => {
+    fileCache = files;
+    renderFileList();
+    deleteAllBtn.disabled = pendingDeletes.size === 0;
+    console.log(`[loadFileList] loaded ${files.length} files`);
+  }).catch(err => {
+    console.error('[loadFileList] fetch error:', err);
+  });
+}
+
+function toggleDelete(filename, btn) {
+  if (pendingDeletes.has(filename)) {
+    pendingDeletes.delete(filename);
+  } else {
+    pendingDeletes.add(filename);
+  }
+  console.log(`[toggleDelete] ${filename} pendingDeletes=`, Array.from(pendingDeletes));
+  // 直接更新 DOM，不重新拉取列表
+  renderFileList();
+  deleteAllBtn.disabled = pendingDeletes.size === 0;
+}
+
+function confirmDeleteAll() {
+  if (!pendingDeletes.size) return;
+  const toDelete = Array.from(pendingDeletes);
+  if (!confirm(`Delete ${toDelete.length} file(s)\n\n${toDelete.join('\n')}`)) return;
+
+  // 乐观更新：立刻从本地缓存和 UI 中移除
+  fileCache = fileCache.filter(f => !pendingDeletes.has(f.name));
+  pendingDeletes.clear();
+  deleteAllBtn.disabled = true;
+  renderFileList();
+  console.log(`[confirmDeleteAll] optimistic removal done, sending delete request`);
+
+  fetch('/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files: toDelete })
+  }).then(r => r.json()).then(d => {
+    console.log('[confirmDeleteAll] server response:', d);
+    if (!d.ok) {
+      alert('Delete failed: ' + d.error);
+      // 失败时重新拉取真实列表
+      loadFileList();
+    }
+  }).catch(err => {
+    console.error('[confirmDeleteAll] fetch error:', err);
+    loadFileList();
+  });
+}
+
 function loadFile(filename) {
   currentFile = filename;
   markers = [];
@@ -344,49 +418,6 @@ function loadFile(filename) {
   player.play();
   document.querySelectorAll('.file-item').forEach(el => el.classList.toggle('active', el.dataset.name===filename));
   loadMarkersFromFile(filename);
-}
-
-function toggleDelete(filename, btn) {
-  if (pendingDeletes.has(filename)) {
-    pendingDeletes.delete(filename);
-    btn.classList.remove('marked');
-    btn.closest('.file-item').classList.remove('pending-delete');
-  } else {
-    pendingDeletes.add(filename);
-    btn.classList.add('marked');
-    btn.closest('.file-item').classList.add('pending-delete');
-  }
-  deleteAllBtn.disabled = pendingDeletes.size === 0;
-}
-
-function confirmDeleteAll() {
-  if (!pendingDeletes.size) return;
-  if (!confirm(`Delete ${pendingDeletes.size} file(s)\n\n${Array.from(pendingDeletes).join('\n')}`)) return;
-  fetch('/delete', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({files: Array.from(pendingDeletes)})
-  }).then(r=>r.json()).then(d=>{ if(d.ok){ pendingDeletes.clear(); loadFileList(); } else alert('Delete failed: '+d.error); });
-}
-
-function loadFileList() {
-  fetch('/files').then(r=>r.json()).then(files=>{
-    fileListEl.innerHTML = '';
-    files.forEach(f=>{
-      const item = document.createElement('div');
-      item.className = 'file-item';
-      item.dataset.name = f.name;
-      if (f.name===currentFile) item.classList.add('active');
-      const safe = f.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      item.innerHTML = `
-        ${f.has_json ? '<span class="has-json-icon" title="Has markers">◈</span>' : '<span style="width:16px;display:inline-block"></span>'}
-        <span class="file-name">${f.name}</span>
-        <span class="file-dur">${f.duration}</span>
-        <button class="trash-btn" title="Mark for deletion" onclick="event.stopPropagation();toggleDelete('${safe}',this)">🗑</button>
-      `;
-      item.addEventListener('click', ()=>loadFile(f.name));
-      fileListEl.appendChild(item);
-    });
-  });
 }
 
 // ── Rename Modal ──────────────────────────────────────────
@@ -405,14 +436,12 @@ modalInput.addEventListener('input', () => {
   const val = modalInput.value.trim();
   if (val) {
     modalPreview.textContent = '→ ' + val + currentFile;
-    const tags = splitTags(val);
-    // show inline detected tags
   } else {
     modalPreview.textContent = '';
   }
 });
 
-modalInput.addEventListener('keydown', e => { if (e.key==='Enter') doRename(); if (e.key==='Escape') closeModal(); });
+modalInput.addEventListener('keydown', e => { if (e.key === 'Enter') doRename(); if (e.key === 'Escape') closeModal(); });
 
 function renderTagChips() {
   tagListEl.innerHTML = '';
@@ -429,26 +458,65 @@ function doRename() {
   const prefix = modalInput.value.trim();
   if (!prefix) { alert('Please enter a prefix'); return; }
   if (!currentFile) return;
+
+  const oldName = currentFile;
   const newName = prefix + currentFile;
+
+  // 乐观更新：立刻关闭 modal，更新本地缓存和播放器
+  closeModal();
+  const wasPlaying = !player.paused;
+  const ct = player.currentTime;
+
+  // 更新本地缓存中的文件名
+  const cacheIdx = fileCache.findIndex(f => f.name === oldName);
+  if (cacheIdx !== -1) {
+    fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: newName };
+  }
+  // 同步更新 pendingDeletes
+  if (pendingDeletes.has(oldName)) {
+    pendingDeletes.delete(oldName);
+    pendingDeletes.add(newName);
+  }
+  currentFile = newName;
+  renderFileList();
+
+  // 立刻切换播放器到新名字（浏览器会重新请求，但 UI 不卡）
+  player.src = '/video/' + encodeURIComponent(newName);
+  player.currentTime = ct;
+  if (wasPlaying) player.play();
+
+  console.log(`[doRename] optimistic rename: ${oldName} -> ${newName}`);
+
   fetch('/rename', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ old_name: currentFile, new_name: newName, prefix: prefix })
-  }).then(r=>r.json()).then(d=>{
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ old_name: oldName, new_name: newName, prefix: prefix })
+  }).then(r => r.json()).then(d => {
+    console.log('[doRename] server response:', d);
     if (d.ok) {
       knownTags = d.tags;
       renderTagChips();
-      closeModal();
-      currentFile = newName;
+      // 服务端完成后再同步一次，保证 has_json 等字段准确
       loadFileList();
-      // reload video with new name
-      const wasPlaying = !player.paused;
-      const ct = player.currentTime;
-      player.src = '/video/' + encodeURIComponent(newName);
+    } else {
+      alert('Rename failed: ' + (d.error || ''));
+      // 回滚乐观更新
+      console.warn('[doRename] rolling back optimistic update');
+      if (cacheIdx !== -1) {
+        fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: oldName };
+      }
+      if (pendingDeletes.has(newName)) {
+        pendingDeletes.delete(newName);
+        pendingDeletes.add(oldName);
+      }
+      currentFile = oldName;
+      player.src = '/video/' + encodeURIComponent(oldName);
       player.currentTime = ct;
       if (wasPlaying) player.play();
-    } else {
-      alert('Rename failed: ' + (d.error||''));
+      renderFileList();
     }
+  }).catch(err => {
+    console.error('[doRename] fetch error:', err);
+    loadFileList();
   });
 }
 
