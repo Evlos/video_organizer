@@ -84,13 +84,26 @@
   #modal-cancel-btn { padding: 8px 20px; background: transparent; border: 1px solid #333; color: var(--text-dim); font-family: 'Courier New', monospace; font-size: 12px; cursor: pointer; letter-spacing: 1px; text-transform: uppercase; }
   #modal-cancel-btn:hover { border-color: #555; color: var(--text); }
 
+  #loading-indicator {
+    display: inline-block;
+    color: var(--green-dim);
+    font-size: 13px;
+    margin-left: 6px;
+    animation: spin 1s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
   body::after { content: ''; position: fixed; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px); pointer-events: none; z-index: 9999; }
 </style>
 </head>
 <body>
 <div id="app">
   <div id="left">
-    <div id="left-header">▍ VIDEO ORGANIZER</div>
+    <div id="left-header">▍ VIDEO ORGANIZER <span id="loading-indicator" style="display:none">⟳</span></div>
     <div id="file-list"></div>
     <div id="left-footer">
       <button id="delete-all-btn" disabled onclick="confirmDeleteAll()">⚠ PURGE</button>
@@ -164,6 +177,22 @@ let pendingDeletes = new Set();
 let isDragging = false;
 let currentFile = null;
 let knownTags = [];
+
+let pendingRequests = 0;
+
+function pushLoading() {
+  pendingRequests++;
+  console.log(`[loading] pendingRequests=${pendingRequests}`);
+  document.getElementById('loading-indicator').style.display = 'inline-block';
+}
+
+function popLoading() {
+  pendingRequests = Math.max(0, pendingRequests - 1);
+  console.log(`[loading] pendingRequests=${pendingRequests}`);
+  if (pendingRequests === 0) {
+    document.getElementById('loading-indicator').style.display = 'none';
+  }
+}
 
 // ── Helpers ──────────────────────────────────────────────
 function fmtTime(s) {
@@ -318,17 +347,24 @@ function saveMarkers() {
   });
   pairs.sort((a,b)=>a[0]-b[0]);
   const payload = { file: currentFile, duration: dur, markers: markers, segments: pairs.map(([s,e])=>({start:s,end:e})) };
+  
+  pushLoading();
   fetch('/save_markers', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify(payload)
-  }).then(r=>r.json()).then(d=>{ if(d.ok) loadFileList(); });
+  }).then(r=>r.json()).then(d=>{ if(d.ok) loadFileList(); }).finally(() => {
+    popLoading();
+  });
 }
 
 function loadMarkersFromFile(filename) {
+  pushLoading();
   fetch('/load_markers/' + encodeURIComponent(filename))
     .then(r=>r.json())
-    .then(d=>{ markers = d.markers || []; renderMarkers(); });
+    .then(d=>{ markers = d.markers || []; renderMarkers(); }).finally(() => {
+      popLoading();
+    });
 }
 
 // ── File list ─────────────────────────────────────────────
@@ -356,6 +392,7 @@ function renderFileList() {
 }
 
 function loadFileList() {
+  pushLoading();
   fetch('/files').then(r => r.json()).then(files => {
     fileCache = files;
     renderFileList();
@@ -363,6 +400,8 @@ function loadFileList() {
     console.log(`[loadFileList] loaded ${files.length} files`);
   }).catch(err => {
     console.error('[loadFileList] fetch error:', err);
+  }).finally(() => {
+    popLoading();
   });
 }
 
@@ -390,6 +429,7 @@ function confirmDeleteAll() {
   renderFileList();
   console.log(`[confirmDeleteAll] optimistic removal done, sending delete request`);
 
+  pushLoading();
   fetch('/delete', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ files: toDelete })
@@ -403,6 +443,8 @@ function confirmDeleteAll() {
   }).catch(err => {
     console.error('[confirmDeleteAll] fetch error:', err);
     loadFileList();
+  }).finally(() => {
+    popLoading();
   });
 }
 
@@ -487,6 +529,7 @@ function doRename() {
 
   console.log(`[doRename] optimistic rename: ${oldName} -> ${newName}`);
 
+  pushLoading();
   fetch('/rename', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ old_name: oldName, new_name: newName, prefix: prefix })
@@ -517,6 +560,8 @@ function doRename() {
   }).catch(err => {
     console.error('[doRename] fetch error:', err);
     loadFileList();
+  }).finally(() => {
+    popLoading();
   });
 }
 
