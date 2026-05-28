@@ -260,18 +260,54 @@ function markSegment(type) {
 
   console.log(`[markSegment] type=${type} currentTime=${currentTime.toFixed(3)} markers_before=`, JSON.stringify(markers));
 
-  // 找到当前时间点之前、同类型的最后一个 marker
-  let lastSameTypeBefore = -1;
-  for (let i = markers.length - 1; i >= 0; i--) {
-    if (markers[i].type === type && markers[i].time < currentTime) {
-      lastSameTypeBefore = i;
-      break;
+  if (type === 'start') {
+    // 找到当前时间之前，最后一个 start marker 的 index
+    let lastStartIdx = -1;
+    for (let i = markers.length - 1; i >= 0; i--) {
+      if (markers[i].type === 'start' && markers[i].time < currentTime) {
+        lastStartIdx = i;
+        break;
+      }
     }
-  }
 
-  if (lastSameTypeBefore !== -1) {
-    console.log(`[markSegment] removing previous ${type} marker at index=${lastSameTypeBefore} time=${markers[lastSameTypeBefore].time.toFixed(3)}`);
-    markers.splice(lastSameTypeBefore, 1);
+    if (lastStartIdx !== -1) {
+      const lastStartTime = markers[lastStartIdx].time;
+      // 检查这个 start 和当前时间之间是否存在 end marker
+      const hasEndBetween = markers.some(
+        m => m.type === 'end' && m.time > lastStartTime && m.time < currentTime
+      );
+      console.log(`[markSegment] lastStartIdx=${lastStartIdx} lastStartTime=${lastStartTime.toFixed(3)} hasEndBetween=${hasEndBetween}`);
+      if (!hasEndBetween) {
+        // 两个 start 之间没有 end，移除前一个孤立的 start
+        console.log(`[markSegment] removing orphan start marker at index=${lastStartIdx} time=${lastStartTime.toFixed(3)}`);
+        markers.splice(lastStartIdx, 1);
+      }
+      // 如果有 end 在中间，说明前一个 start 已成对，不移除
+    }
+  } else if (type === 'end') {
+    // 找到当前时间之前，最后一个 end marker 的 index
+    let lastEndIdx = -1;
+    for (let i = markers.length - 1; i >= 0; i--) {
+      if (markers[i].type === 'end' && markers[i].time < currentTime) {
+        lastEndIdx = i;
+        break;
+      }
+    }
+
+    if (lastEndIdx !== -1) {
+      const lastEndTime = markers[lastEndIdx].time;
+      // 检查这个 end 之后到当前时间之间是否存在 start marker
+      const hasStartBetween = markers.some(
+        m => m.type === 'start' && m.time > lastEndTime && m.time < currentTime
+      );
+      console.log(`[markSegment] lastEndIdx=${lastEndIdx} lastEndTime=${lastEndTime.toFixed(3)} hasStartBetween=${hasStartBetween}`);
+      if (!hasStartBetween) {
+        // 两个 end 之间没有 start，移除前一个孤立的 end
+        console.log(`[markSegment] removing orphan end marker at index=${lastEndIdx} time=${lastEndTime.toFixed(3)}`);
+        markers.splice(lastEndIdx, 1);
+      }
+      // 如果有 start 在中间，说明前一个 end 已成对，不移除
+    }
   }
 
   markers.push({ type, time: currentTime });
