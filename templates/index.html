@@ -1,163 +1,320 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh" class="">
 <head>
 <meta charset="UTF-8">
 <title>VIDEO ORGANIZER</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: { mono: ['Courier New', 'monospace'] },
+        colors: {
+          green: {
+            neon:  '#00ff41',
+            dim:   '#00aa28',
+            dark:  '#003310',
+            faint: '#c8ffc8',
+          },
+          panel: '#0f0f0f',
+        },
+      }
+    }
+  }
+</script>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #0a0a0a; --panel: #0f0f0f; --border: #1e1e1e;
-    --green: #00ff41; --green-dim: #00aa28; --green-dark: #003310;
-    --red: #ff3030; --red-dim: #881010;
-    --text: #c8ffc8; --text-dim: #557755;
+  /* scanline overlay */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none; z-index: 9999;
   }
-  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Courier New', monospace; overflow: hidden; }
-  #app { display: flex; height: 100vh; }
-
-  /* LEFT */
-  #left { width: 33.333%; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--panel); }
-  #left-header { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--green); letter-spacing: 2px; text-transform: uppercase; }
-  #file-list { flex: 1; overflow-y: auto; }
+  /* custom scrollbar */
   #file-list::-webkit-scrollbar { width: 4px; }
-  #file-list::-webkit-scrollbar-thumb { background: var(--green-dim); }
-  .file-item { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; gap: 6px; }
-  .file-item:hover { background: #111; }
-  .file-item.active { background: var(--green-dark); border-left: 2px solid var(--green); }
-  .file-item.pending-delete { opacity: 0.4; text-decoration: line-through; }
-  .has-json-icon { font-size: 12px; flex-shrink: 0; color: var(--green); }
-  .file-name { flex: 1; font-size: 12px; color: var(--text); word-break: break-all; }
-  .file-dur { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
-  .trash-btn { background: none; border: none; cursor: pointer; color: var(--text-dim); font-size: 14px; padding: 2px 4px; flex-shrink: 0; }
-  .trash-btn:hover { color: var(--red); }
-  .trash-btn.marked { color: var(--red); }
-  #left-footer { padding: 12px 16px; border-top: 1px solid var(--border); }
-  #delete-all-btn { width: 100%; padding: 8px; background: transparent; border: 1px solid var(--red-dim); color: var(--red); font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 1px; cursor: pointer; text-transform: uppercase; }
-  #delete-all-btn:hover { background: var(--red-dim); color: #fff; }
-  #delete-all-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-  /* RIGHT */
-  #right { flex: 1; display: flex; flex-direction: column; background: #000; min-width: 0; }
-  #video-wrapper { flex: 1; display: flex; align-items: center; justify-content: center; background: #000; overflow: hidden; cursor: pointer; position: relative; }
-  video { max-width: 100%; max-height: 100%; display: block; }
-  #no-video { color: var(--text-dim); font-size: 13px; letter-spacing: 2px; pointer-events: none; }
-  #play-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 48px; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
-  #play-overlay.show { animation: fadeout 0.6s forwards; }
+  .dark #file-list::-webkit-scrollbar-thumb { background: #00aa28; }
+  #file-list::-webkit-scrollbar-thumb { background: #94a3b8; }
+  /* progress head glow */
+  #progress-head { box-shadow: 0 0 6px currentColor; }
+  /* marker brace */
+  .marker-brace {
+    position: absolute; top: 50%; transform: translate(-50%,-50%);
+    font-size: 18px; font-weight: bold; pointer-events: none;
+    text-shadow: 0 0 6px currentColor;
+  }
+  /* segment highlight */
+  .segment-highlight {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    height: 6px; pointer-events: none;
+  }
+  /* play overlay animation */
   @keyframes fadeout { 0%{opacity:1} 70%{opacity:1} 100%{opacity:0} }
-
-  /* PROGRESS AREA */
-  #progress-area { background: var(--panel); border-top: 1px solid var(--border); display: flex; flex-direction: column; padding: 10px 16px; gap: 8px; flex-shrink: 0; }
-  #time-display { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; }
-  #progress-container { position: relative; width: 100%; height: 40px; cursor: pointer; display: flex; align-items: center; }
-  #progress-track { position: absolute; left: 0; right: 0; height: 6px; background: #1c1c1c; border-radius: 3px; }
-  #progress-bar { height: 100%; background: var(--green-dim); border-radius: 3px; width: 0%; pointer-events: none; }
-  #progress-head { position: absolute; top: 50%; transform: translate(-50%,-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--green); left: 0%; pointer-events: none; box-shadow: 0 0 6px var(--green); }
-  #progress-container.dragging #progress-head { transform: translate(-50%,-50%) scale(1.4); }
-  #markers-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-  .segment-highlight { position: absolute; top: 50%; transform: translateY(-50%); height: 6px; background: rgba(0,255,65,0.25); border-top: 1px solid var(--green-dim); border-bottom: 1px solid var(--green-dim); pointer-events: none; }
-  .marker-brace { position: absolute; top: 50%; transform: translate(-50%,-50%); font-size: 18px; color: var(--green); font-weight: bold; pointer-events: none; text-shadow: 0 0 6px var(--green); }
-
-  /* CONTROLS ROW */
-  #controls-row { display: flex; align-items: center; gap: 8px; }
-  #controls-left { display: flex; gap: 8px; }
-  #controls-center { flex: 1; display: flex; justify-content: center; }
-  #controls-right { display: flex; gap: 8px; }
-  .ctrl-btn { padding: 7px 14px; background: transparent; border: 1px solid var(--green-dim); color: var(--green); font-family: 'Courier New', monospace; font-size: 11px; cursor: pointer; letter-spacing: 1px; text-transform: uppercase; transition: all 0.15s; white-space: nowrap; flex-shrink: 0; border-radius: 2px; touch-action: manipulation; }
-  .ctrl-btn:hover { background: var(--green-dark); box-shadow: 0 0 8px var(--green-dim); }
-  .ctrl-btn:active { background: var(--green-dim); color: #000; }
-  .ctrl-btn.danger { border-color: #664400; color: #cc8800; }
-  .ctrl-btn.danger:hover { background: #331f00; }
-
-  /* MODAL */
-  #modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 1000; align-items: center; justify-content: center; }
-  #modal-overlay.open { display: flex; }
-  #modal { background: var(--panel); border: 1px solid var(--green-dim); padding: 24px; width: 480px; max-width: 90vw; box-shadow: 0 0 30px rgba(0,255,65,0.15); }
-  #modal h3 { color: var(--green); font-size: 13px; letter-spacing: 2px; margin-bottom: 16px; text-transform: uppercase; }
-  #modal-input { width: 100%; background: #000; border: 1px solid var(--green-dim); color: var(--green); font-family: 'Courier New', monospace; font-size: 14px; padding: 10px 12px; outline: none; letter-spacing: 1px; }
-  #modal-input:focus { border-color: var(--green); box-shadow: 0 0 8px rgba(0,255,65,0.3); }
-  #modal-preview { font-size: 11px; color: var(--text-dim); margin: 8px 0 4px 0; min-height: 16px; }
-  #tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 16px 0; min-height: 28px; }
-  .tag-chip { padding: 4px 10px; border: 1px solid var(--green-dim); color: var(--green-dim); font-size: 11px; cursor: pointer; border-radius: 2px; font-family: 'Courier New', monospace; transition: all 0.15s; }
-  .tag-chip:hover { background: var(--green-dark); color: var(--green); border-color: var(--green); }
-  #modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
-  #modal-confirm-btn { padding: 8px 20px; background: var(--green-dark); border: 1px solid var(--green-dim); color: var(--green); font-family: 'Courier New', monospace; font-size: 12px; cursor: pointer; letter-spacing: 1px; text-transform: uppercase; }
-  #modal-confirm-btn:hover { background: var(--green-dim); color: #000; }
-  #modal-cancel-btn { padding: 8px 20px; background: transparent; border: 1px solid #333; color: var(--text-dim); font-family: 'Courier New', monospace; font-size: 12px; cursor: pointer; letter-spacing: 1px; text-transform: uppercase; }
-  #modal-cancel-btn:hover { border-color: #555; color: var(--text); }
-
-  #loading-indicator {
-    display: inline-block;
-    color: var(--green-dim);
-    font-size: 13px;
-    margin-left: 6px;
-    animation: spin 1s linear infinite;
-    vertical-align: middle;
-  }
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-  }
-
-  body::after { content: ''; position: fixed; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px); pointer-events: none; z-index: 9999; }
+  #play-overlay.show { animation: fadeout 0.6s forwards; }
+  /* loading spinner */
+  @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  #loading-indicator { animation: spin 1s linear infinite; }
 </style>
 </head>
-<body>
-<div id="app">
-  <div id="left">
-    <div id="left-header">▍ VIDEO ORGANIZER <span id="loading-indicator" style="display:none">⟳</span></div>
-    <div id="file-list"></div>
-    <div id="left-footer">
-      <button id="delete-all-btn" disabled onclick="confirmDeleteAll()">⚠ PURGE</button>
+<body class="dark">
+<!-- Theme init: read localStorage before render -->
+<script>
+  (function() {
+    var theme = localStorage.getItem('videoOrgTheme') || 'dark';
+    if (theme === 'light') {
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
+    } else {
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
+    }
+  })();
+</script>
+
+<!-- Root -->
+<div id="app" class="flex h-screen overflow-hidden
+  bg-white text-slate-800
+  dark:bg-[#0a0a0a] dark:text-green-faint
+  font-mono">
+
+  <!-- ── LEFT PANEL ───────────────────────────────── -->
+  <div id="left" class="w-1/3 flex flex-col
+    border-r border-slate-200 bg-slate-50
+    dark:border-[#1e1e1e] dark:bg-panel">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between px-4 py-3
+      border-b border-slate-200 dark:border-[#1e1e1e]">
+      <span class="text-xs tracking-widest uppercase
+        text-emerald-600 dark:text-green-neon font-bold">
+        ▍ VIDEO ORGANIZER
+        <span id="loading-indicator"
+          class="inline-block ml-1 text-emerald-500 dark:text-green-dim"
+          style="display:none">⟳</span>
+      </span>
+
+      <!-- Theme toggle -->
+      <button id="theme-toggle"
+        onclick="toggleTheme()"
+        title="Toggle light / dark"
+        class="flex items-center gap-1 px-2 py-1 text-xs rounded
+          border border-slate-300 text-slate-600
+          hover:bg-slate-200 transition-colors
+          dark:border-[#1e1e1e] dark:text-green-dim dark:hover:bg-[#1a1a1a]">
+        <span id="theme-icon">☀️</span>
+        <span id="theme-label" class="tracking-widest uppercase text-[10px]">Light</span>
+      </button>
+    </div>
+
+    <!-- File list -->
+    <div id="file-list" class="flex-1 overflow-y-auto"></div>
+
+    <!-- Footer: PURGE -->
+    <div class="px-4 py-3 border-t border-slate-200 dark:border-[#1e1e1e]">
+      <button id="delete-all-btn" disabled onclick="confirmDeleteAll()"
+        class="w-full py-2 text-xs tracking-widest uppercase
+          border rounded transition-colors
+          border-red-300 text-red-500 bg-transparent
+          hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed
+          dark:border-red-900 dark:text-red-500
+          dark:hover:bg-red-950">
+        ⚠ PURGE
+      </button>
     </div>
   </div>
 
-  <div id="right">
-    <div id="video-wrapper" onclick="togglePlay()">
-      <div id="no-video">// SELECT FILE TO PLAY</div>
-      <video id="player" style="display:none" preload="metadata"></video>
-      <div id="play-overlay"></div>
+  <!-- ── RIGHT PANEL ──────────────────────────────── -->
+  <div id="right" class="flex-1 flex flex-col bg-black min-w-0">
+
+    <!-- Video area -->
+    <div id="video-wrapper"
+      onclick="togglePlay()"
+      class="flex-1 flex items-center justify-center bg-black overflow-hidden cursor-pointer relative">
+      <div id="no-video"
+        class="text-xs tracking-widest pointer-events-none
+          text-slate-500 dark:text-[#557755]">
+        // SELECT FILE TO PLAY
+      </div>
+      <video id="player" class="max-w-full max-h-full block" style="display:none" preload="metadata"></video>
+      <div id="play-overlay"
+        class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+          text-5xl opacity-0 pointer-events-none text-white"></div>
     </div>
 
-    <div id="progress-area">
-      <div id="time-display">00:00 / 00:00</div>
-      <div id="progress-container">
-        <div id="progress-track">
-          <div id="progress-bar"></div>
-          <div id="progress-head"></div>
-        </div>
-        <div id="markers-layer"></div>
-      </div>
-      <div id="controls-row">
-        <div id="controls-left">
-          <button class="ctrl-btn danger" onclick="clearMarkers()">✕ CLEAR</button>
-          <button class="ctrl-btn danger" onclick="undoMarker()">↩ UNDO</button>
-        </div>
-        <div id="controls-center">
-          <button class="ctrl-btn" onclick="openRenameModal()">✎ RENAME</button>
-        </div>
-        <div id="controls-right">
-          <button class="ctrl-btn" onclick="markSegment('start')">{ Mark In</button>
-          <button class="ctrl-btn" onclick="markSegment('end')">Mark Out }</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+    <!-- Progress area -->
+    <div id="progress-area"
+      class="flex-shrink-0 flex flex-col gap-2 px-4 py-3
+        border-t border-slate-200 bg-slate-50
+        dark:border-[#1e1e1e] dark:bg-panel">
 
-<!-- Rename Modal -->
-<div id="modal-overlay">
-  <div id="modal">
-    <h3>✎ RENAME VIDEO</h3>
-    <input id="modal-input" type="text" placeholder="Please enter a prefix, e.g. 1b2k" autocomplete="off" spellcheck="false" />
-    <div id="modal-preview"></div>
-    <div id="tag-list"></div>
-    <div id="modal-actions">
-      <button id="modal-cancel-btn" onclick="closeModal()">CANCEL</button>
-      <button id="modal-confirm-btn" onclick="doRename()">RENAME</button>
+      <div id="time-display"
+        class="text-[10px] tracking-widest
+          text-slate-500 dark:text-[#557755]">
+        00:00 / 00:00
+      </div>
+
+      <!-- Seek bar -->
+      <div id="progress-container"
+        class="relative w-full h-10 cursor-pointer flex items-center">
+        <div id="progress-track"
+          class="absolute inset-x-0 h-1.5 rounded-full
+            bg-slate-200 dark:bg-[#1c1c1c]">
+          <div id="progress-bar"
+            class="h-full rounded-full bg-emerald-500 dark:bg-green-dim"
+            style="width:0%"></div>
+        </div>
+        <div id="progress-head"
+          class="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full pointer-events-none
+            bg-emerald-500 text-emerald-500
+            dark:bg-green-neon dark:text-green-neon"
+          style="left:0%"></div>
+        <div id="markers-layer" class="absolute inset-0 pointer-events-none"></div>
+      </div>
+
+      <!-- Controls row -->
+      <div id="controls-row" class="flex items-center gap-2">
+
+        <!-- Left: Clear / Undo -->
+        <div class="flex gap-2">
+          <button onclick="clearMarkers()"
+            class="ctrl-btn px-3 py-1.5 text-[11px] tracking-widest uppercase rounded
+              border transition-all
+              border-orange-300 text-orange-500 bg-transparent
+              hover:bg-orange-50
+              dark:border-yellow-900 dark:text-yellow-600 dark:hover:bg-yellow-950">
+            ✕ CLEAR
+          </button>
+          <button onclick="undoMarker()"
+            class="ctrl-btn px-3 py-1.5 text-[11px] tracking-widest uppercase rounded
+              border transition-all
+              border-orange-300 text-orange-500 bg-transparent
+              hover:bg-orange-50
+              dark:border-yellow-900 dark:text-yellow-600 dark:hover:bg-yellow-950">
+            ↩ UNDO
+          </button>
+        </div>
+
+        <!-- Center: Rename -->
+        <div class="flex-1 flex justify-center">
+          <button onclick="openRenameModal()"
+            class="ctrl-btn px-3 py-1.5 text-[11px] tracking-widest uppercase rounded
+              border transition-all
+              border-emerald-400 text-emerald-600 bg-transparent
+              hover:bg-emerald-50
+              dark:border-green-dim dark:text-green-neon dark:hover:bg-green-dark">
+            ✎ RENAME
+          </button>
+        </div>
+
+        <!-- Right: Mark In / Out -->
+        <div class="flex gap-2">
+          <button onclick="markSegment('start')"
+            class="ctrl-btn px-3 py-1.5 text-[11px] tracking-widest uppercase rounded
+              border transition-all
+              border-emerald-400 text-emerald-600 bg-transparent
+              hover:bg-emerald-50
+              dark:border-green-dim dark:text-green-neon dark:hover:bg-green-dark">
+            { Mark In
+          </button>
+          <button onclick="markSegment('end')"
+            class="ctrl-btn px-3 py-1.5 text-[11px] tracking-widest uppercase rounded
+              border transition-all
+              border-emerald-400 text-emerald-600 bg-transparent
+              hover:bg-emerald-50
+              dark:border-green-dim dark:text-green-neon dark:hover:bg-green-dark">
+            Mark Out }
+          </button>
+        </div>
+
+      </div>
+    </div><!-- /progress-area -->
+  </div><!-- /right -->
+</div><!-- /app -->
+
+<!-- ── RENAME MODAL ───────────────────────────────────── -->
+<div id="modal-overlay"
+  class="hidden fixed inset-0 bg-black/80 z-50 items-center justify-center">
+  <div id="modal"
+    class="w-[480px] max-w-[90vw] p-6 rounded
+      border shadow-lg
+      bg-white border-slate-200
+      dark:bg-panel dark:border-green-dim dark:shadow-[0_0_30px_rgba(0,255,65,0.15)]">
+
+    <h3 class="text-xs tracking-widest uppercase mb-4
+      text-emerald-600 dark:text-green-neon">
+      ✎ RENAME VIDEO
+    </h3>
+
+    <input id="modal-input" type="text"
+      placeholder="Please enter a prefix, e.g. 1b2k"
+      autocomplete="off" spellcheck="false"
+      class="w-full px-3 py-2 text-sm tracking-widest outline-none rounded
+        border bg-white text-slate-800
+        border-slate-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-300
+        dark:bg-black dark:text-green-neon dark:border-green-dim
+        dark:focus:border-green-neon dark:focus:shadow-[0_0_8px_rgba(0,255,65,0.3)]
+        font-mono" />
+
+    <div id="modal-preview"
+      class="text-[11px] mt-2 mb-1 min-h-[16px]
+        text-slate-400 dark:text-[#557755]"></div>
+
+    <div id="tag-list" class="flex flex-wrap gap-1.5 my-2 min-h-[28px]"></div>
+
+    <div class="flex gap-2 justify-end mt-4">
+      <button id="modal-cancel-btn" onclick="closeModal()"
+        class="px-5 py-2 text-xs tracking-widest uppercase rounded
+          border transition-all
+          border-slate-300 text-slate-500 bg-transparent
+          hover:border-slate-400 hover:text-slate-700
+          dark:border-[#333] dark:text-[#557755] dark:hover:border-[#555] dark:hover:text-green-faint font-mono">
+        CANCEL
+      </button>
+      <button id="modal-confirm-btn" onclick="doRename()"
+        class="px-5 py-2 text-xs tracking-widest uppercase rounded
+          border transition-all
+          border-emerald-400 text-emerald-600 bg-emerald-50
+          hover:bg-emerald-100
+          dark:bg-green-dark dark:border-green-dim dark:text-green-neon
+          dark:hover:bg-green-dim dark:hover:text-black font-mono">
+        RENAME
+      </button>
     </div>
   </div>
 </div>
 
 <script>
+// ── Theme toggle ─────────────────────────────────────────
+function applyTheme(theme) {
+  const html = document.documentElement;
+  const body = document.body;
+  const icon  = document.getElementById('theme-icon');
+  const label = document.getElementById('theme-label');
+  if (theme === 'dark') {
+    html.classList.add('dark');
+    body.classList.add('dark');
+    icon.textContent  = '☀️';
+    label.textContent = 'Light';
+  } else {
+    html.classList.remove('dark');
+    body.classList.remove('dark');
+    icon.textContent  = '🌙';
+    label.textContent = 'Dark';
+  }
+}
+function toggleTheme() {
+  const current = localStorage.getItem('videoOrgTheme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('videoOrgTheme', next);
+  applyTheme(next);
+}
+// Init theme on load
+(function() {
+  var t = localStorage.getItem('videoOrgTheme') || 'dark';
+  applyTheme(t);
+})();
+
+// ── App ───────────────────────────────────────────────────
 const player = document.getElementById('player');
 const progressBar = document.getElementById('progress-bar');
 const progressHead = document.getElementById('progress-head');
@@ -177,24 +334,17 @@ let pendingDeletes = new Set();
 let isDragging = false;
 let currentFile = null;
 let knownTags = [];
-
 let pendingRequests = 0;
 
 function pushLoading() {
   pendingRequests++;
-  console.log(`[loading] pendingRequests=${pendingRequests}`);
   document.getElementById('loading-indicator').style.display = 'inline-block';
 }
-
 function popLoading() {
   pendingRequests = Math.max(0, pendingRequests - 1);
-  console.log(`[loading] pendingRequests=${pendingRequests}`);
-  if (pendingRequests === 0) {
-    document.getElementById('loading-indicator').style.display = 'none';
-  }
+  if (pendingRequests === 0) document.getElementById('loading-indicator').style.display = 'none';
 }
 
-// ── Helpers ──────────────────────────────────────────────
 function fmtTime(s) {
   s = Math.floor(s);
   const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
@@ -204,7 +354,6 @@ function fmtTime(s) {
 function pad(n) { return String(n).padStart(2,'0'); }
 
 function splitTags(prefix) {
-  // split on digit/letter boundaries: 1b2k -> ['1b','2k']
   return (prefix.match(/(?:\d+[a-zA-Z_-]+|[a-zA-Z_-]+\d+)/g) || []);
 }
 
@@ -257,80 +406,44 @@ progressContainer.addEventListener('touchend', () => { isDragging = false; });
 function markSegment(type) {
   if (!player.src || !player.duration) return;
   const currentTime = player.currentTime;
-
-  console.log(`[markSegment] type=${type} currentTime=${currentTime.toFixed(3)} markers_before=`, JSON.stringify(markers));
-
   if (type === 'start') {
-    // 找到当前时间之前，最后一个 start marker 的 index
     let lastStartIdx = -1;
     for (let i = markers.length - 1; i >= 0; i--) {
-      if (markers[i].type === 'start' && markers[i].time < currentTime) {
-        lastStartIdx = i;
-        break;
-      }
+      if (markers[i].type === 'start' && markers[i].time < currentTime) { lastStartIdx = i; break; }
     }
-
     if (lastStartIdx !== -1) {
       const lastStartTime = markers[lastStartIdx].time;
-      // 检查这个 start 和当前时间之间是否存在 end marker
-      const hasEndBetween = markers.some(
-        m => m.type === 'end' && m.time > lastStartTime && m.time < currentTime
-      );
-      console.log(`[markSegment] lastStartIdx=${lastStartIdx} lastStartTime=${lastStartTime.toFixed(3)} hasEndBetween=${hasEndBetween}`);
-      if (!hasEndBetween) {
-        // 两个 start 之间没有 end，移除前一个孤立的 start
-        console.log(`[markSegment] removing orphan start marker at index=${lastStartIdx} time=${lastStartTime.toFixed(3)}`);
-        markers.splice(lastStartIdx, 1);
-      }
-      // 如果有 end 在中间，说明前一个 start 已成对，不移除
+      const hasEndBetween = markers.some(m => m.type === 'end' && m.time > lastStartTime && m.time < currentTime);
+      if (!hasEndBetween) markers.splice(lastStartIdx, 1);
     }
   } else if (type === 'end') {
-    // 找到当前时间之前，最后一个 end marker 的 index
     let lastEndIdx = -1;
     for (let i = markers.length - 1; i >= 0; i--) {
-      if (markers[i].type === 'end' && markers[i].time < currentTime) {
-        lastEndIdx = i;
-        break;
-      }
+      if (markers[i].type === 'end' && markers[i].time < currentTime) { lastEndIdx = i; break; }
     }
-
     if (lastEndIdx !== -1) {
       const lastEndTime = markers[lastEndIdx].time;
-      // 检查这个 end 之后到当前时间之间是否存在 start marker
-      const hasStartBetween = markers.some(
-        m => m.type === 'start' && m.time > lastEndTime && m.time < currentTime
-      );
-      console.log(`[markSegment] lastEndIdx=${lastEndIdx} lastEndTime=${lastEndTime.toFixed(3)} hasStartBetween=${hasStartBetween}`);
-      if (!hasStartBetween) {
-        // 两个 end 之间没有 start，移除前一个孤立的 end
-        console.log(`[markSegment] removing orphan end marker at index=${lastEndIdx} time=${lastEndTime.toFixed(3)}`);
-        markers.splice(lastEndIdx, 1);
-      }
-      // 如果有 start 在中间，说明前一个 end 已成对，不移除
+      const hasStartBetween = markers.some(m => m.type === 'start' && m.time > lastEndTime && m.time < currentTime);
+      if (!hasStartBetween) markers.splice(lastEndIdx, 1);
     }
   }
-
   markers.push({ type, time: currentTime });
-  console.log(`[markSegment] markers_after=`, JSON.stringify(markers));
-
   renderMarkers();
   saveMarkers();
 }
 
 function undoMarker() {
   if (!markers.length) return;
-  markers.pop();
-  renderMarkers();
-  saveMarkers();
+  markers.pop(); renderMarkers(); saveMarkers();
 }
 
 function clearMarkers() {
   if (!markers.length) return;
   if (!confirm('Clear all markers?')) return;
-  markers = [];
-  renderMarkers();
-  saveMarkers();
+  markers = []; renderMarkers(); saveMarkers();
 }
+
+function isDark() { return document.documentElement.classList.contains('dark'); }
 
 function renderMarkers() {
   markersLayer.innerHTML = '';
@@ -344,17 +457,19 @@ function renderMarkers() {
     if (ends[ei]>starts[si]) { pairs.push([starts[si],ends[ei]]); si++; ei++; }
     else ei++;
   }
+  const segColor = isDark() ? 'rgba(0,255,65,0.25)' : 'rgba(16,185,129,0.2)';
+  const segBorder = isDark() ? '#00aa28' : '#10b981';
   pairs.forEach(([s,e]) => {
     const el = document.createElement('div');
     el.className = 'segment-highlight';
-    el.style.left  = (s/dur*100)+'%';
-    el.style.width = ((e-s)/dur*100)+'%';
+    el.style.cssText = `left:${s/dur*100}%;width:${(e-s)/dur*100}%;background:${segColor};border-top:1px solid ${segBorder};border-bottom:1px solid ${segBorder};`;
     markersLayer.appendChild(el);
   });
+  const braceColor = isDark() ? '#00ff41' : '#059669';
   markers.forEach(m => {
     const el = document.createElement('div');
     el.className = 'marker-brace';
-    el.style.left = (m.time/dur*100)+'%';
+    el.style.cssText = `left:${m.time/dur*100}%;color:${braceColor};`;
     el.textContent = m.type==='start' ? '{' : '}';
     markersLayer.appendChild(el);
   });
@@ -363,7 +478,6 @@ function renderMarkers() {
 function saveMarkers() {
   if (!currentFile || !player.duration) return;
   const dur = player.duration;
-  // fill lonely markers
   const starts = markers.filter(m=>m.type==='start').map(m=>m.time).sort((a,b)=>a-b);
   const ends   = markers.filter(m=>m.type==='end').map(m=>m.time).sort((a,b)=>a-b);
   const pairs = [];
@@ -372,55 +486,60 @@ function saveMarkers() {
     if (ends[ei]>starts[si]) { pairs.push([starts[si],ends[ei]]); si++; ei++; }
     else ei++;
   }
-  // leftover starts -> pair with video end
   while (si<starts.length) { pairs.push([starts[si], dur]); si++; }
-  // leftover ends -> pair with video start (0)
-  // collect all ends that were never paired
-  // rebuild: any end < first paired start gets paired with 0
   const usedEnds = new Set(pairs.map(p=>p[1]).filter(v=>v!==dur));
-  ends.forEach(e => {
-    if (!usedEnds.has(e) && e!==dur) { pairs.push([0, e]); usedEnds.add(e); }
-  });
+  ends.forEach(e => { if (!usedEnds.has(e) && e!==dur) { pairs.push([0, e]); usedEnds.add(e); } });
   pairs.sort((a,b)=>a[0]-b[0]);
-  const payload = { file: currentFile, duration: dur, markers: markers, segments: pairs.map(([s,e])=>({start:s,end:e})) };
-  
+  const payload = { file: currentFile, duration: dur, markers, segments: pairs.map(([s,e])=>({start:s,end:e})) };
   pushLoading();
   fetch('/save_markers', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(payload)
-  }).then(r=>r.json()).then(d=>{ if(d.ok) loadFileList(); }).finally(() => {
-    popLoading();
-  });
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+  }).then(r=>r.json()).then(d=>{ if(d.ok) loadFileList(); }).finally(popLoading);
 }
 
 function loadMarkersFromFile(filename) {
   pushLoading();
   fetch('/load_markers/' + encodeURIComponent(filename))
     .then(r=>r.json())
-    .then(d=>{ markers = d.markers || []; renderMarkers(); }).finally(() => {
-      popLoading();
-    });
+    .then(d=>{ markers = d.markers || []; renderMarkers(); })
+    .finally(popLoading);
 }
 
 // ── File list ─────────────────────────────────────────────
-let fileCache = []; // 本地文件列表缓存，用于乐观更新
+let fileCache = [];
 
 function renderFileList() {
   fileListEl.innerHTML = '';
   fileCache.forEach(f => {
     const item = document.createElement('div');
-    item.className = 'file-item';
     item.dataset.name = f.name;
-    if (f.name === currentFile) item.classList.add('active');
-    if (pendingDeletes.has(f.name)) item.classList.add('pending-delete');
+    const isActive  = f.name === currentFile;
+    const isPending = pendingDeletes.has(f.name);
+
+    item.className = [
+      'flex items-center gap-1.5 px-4 py-2.5 cursor-pointer transition-colors',
+      'border-b border-slate-100 dark:border-[#1e1e1e]',
+      isActive
+        ? 'bg-emerald-50 border-l-2 border-l-emerald-500 dark:bg-green-dark dark:border-l-green-neon'
+        : 'hover:bg-slate-100 dark:hover:bg-[#111]',
+      isPending ? 'opacity-40 line-through' : ''
+    ].join(' ');
 
     const safe = f.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     item.innerHTML = `
-      ${f.has_json ? '<span class="has-json-icon" title="Has markers">◈</span>' : '<span style="width:16px;display:inline-block"></span>'}
-      <span class="file-name">${f.name}</span>
-      <span class="file-dur">${f.duration}</span>
-      <button class="trash-btn${pendingDeletes.has(f.name) ? ' marked' : ''}" title="Mark for deletion" onclick="event.stopPropagation();toggleDelete('${safe}',this)">🗑</button>
+      ${f.has_json
+        ? '<span class="text-xs flex-shrink-0 text-emerald-500 dark:text-green-neon" title="Has markers">◈</span>'
+        : '<span class="w-4 flex-shrink-0 inline-block"></span>'}
+      <span class="flex-1 text-xs break-all
+        text-slate-700 dark:text-green-faint">${f.name}</span>
+      <span class="text-[11px] whitespace-nowrap
+        text-slate-400 dark:text-[#557755]">${f.duration}</span>
+      <button
+        class="flex-shrink-0 bg-transparent border-none cursor-pointer px-1 text-sm transition-colors
+          text-slate-400 hover:text-red-500
+          ${isPending ? 'text-red-500 dark:text-red-500' : 'dark:text-[#557755] dark:hover:text-red-500'}"
+        title="Mark for deletion"
+        onclick="event.stopPropagation();toggleDelete('${safe}',this)">🗑</button>
     `;
     item.addEventListener('click', () => loadFile(f.name));
     fileListEl.appendChild(item);
@@ -429,26 +548,16 @@ function renderFileList() {
 
 function loadFileList() {
   pushLoading();
-  fetch('/files').then(r => r.json()).then(files => {
+  fetch('/files').then(r=>r.json()).then(files => {
     fileCache = files;
     renderFileList();
     deleteAllBtn.disabled = pendingDeletes.size === 0;
-    console.log(`[loadFileList] loaded ${files.length} files`);
-  }).catch(err => {
-    console.error('[loadFileList] fetch error:', err);
-  }).finally(() => {
-    popLoading();
-  });
+  }).catch(err => console.error('[loadFileList]', err)).finally(popLoading);
 }
 
 function toggleDelete(filename, btn) {
-  if (pendingDeletes.has(filename)) {
-    pendingDeletes.delete(filename);
-  } else {
-    pendingDeletes.add(filename);
-  }
-  console.log(`[toggleDelete] ${filename} pendingDeletes=`, Array.from(pendingDeletes));
-  // 直接更新 DOM，不重新拉取列表
+  if (pendingDeletes.has(filename)) pendingDeletes.delete(filename);
+  else pendingDeletes.add(filename);
   renderFileList();
   deleteAllBtn.disabled = pendingDeletes.size === 0;
 }
@@ -457,31 +566,16 @@ function confirmDeleteAll() {
   if (!pendingDeletes.size) return;
   const toDelete = Array.from(pendingDeletes);
   if (!confirm(`Delete ${toDelete.length} file(s)\n\n${toDelete.join('\n')}`)) return;
-
-  // 乐观更新：立刻从本地缓存和 UI 中移除
   fileCache = fileCache.filter(f => !pendingDeletes.has(f.name));
   pendingDeletes.clear();
   deleteAllBtn.disabled = true;
   renderFileList();
-  console.log(`[confirmDeleteAll] optimistic removal done, sending delete request`);
-
   pushLoading();
   fetch('/delete', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ files: toDelete })
-  }).then(r => r.json()).then(d => {
-    console.log('[confirmDeleteAll] server response:', d);
-    if (!d.ok) {
-      alert('Delete failed: ' + d.error);
-      // 失败时重新拉取真实列表
-      loadFileList();
-    }
-  }).catch(err => {
-    console.error('[confirmDeleteAll] fetch error:', err);
-    loadFileList();
-  }).finally(() => {
-    popLoading();
-  });
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ files: toDelete })
+  }).then(r=>r.json()).then(d=>{
+    if (!d.ok) { alert('Delete failed: ' + d.error); loadFileList(); }
+  }).catch(err => { console.error('[confirmDeleteAll]', err); loadFileList(); }).finally(popLoading);
 }
 
 function loadFile(filename) {
@@ -494,7 +588,16 @@ function loadFile(filename) {
   player.style.display = 'block';
   player.src = '/video/' + encodeURIComponent(filename);
   player.play();
-  document.querySelectorAll('.file-item').forEach(el => el.classList.toggle('active', el.dataset.name===filename));
+  document.querySelectorAll('#file-list > div').forEach(el => {
+    const isActive = el.dataset.name === filename;
+    el.classList.toggle('bg-emerald-50', isActive);
+    el.classList.toggle('border-l-2', isActive);
+    el.classList.toggle('border-l-emerald-500', isActive);
+    el.classList.toggle('dark:bg-green-dark', isActive);
+    el.classList.toggle('dark:border-l-green-neon', isActive);
+    el.classList.toggle('hover:bg-slate-100', !isActive);
+    el.classList.toggle('dark:hover:bg-[#111]', !isActive);
+  });
   loadMarkersFromFile(filename);
 }
 
@@ -504,28 +607,32 @@ function openRenameModal() {
   modalInput.value = '';
   modalPreview.textContent = '';
   renderTagChips();
-  modalOverlay.classList.add('open');
+  modalOverlay.classList.remove('hidden');
+  modalOverlay.classList.add('flex');
   modalInput.focus();
 }
 
-function closeModal() { modalOverlay.classList.remove('open'); }
+function closeModal() {
+  modalOverlay.classList.add('hidden');
+  modalOverlay.classList.remove('flex');
+}
 
 modalInput.addEventListener('input', () => {
   const val = modalInput.value.trim();
-  if (val) {
-    modalPreview.textContent = '→ ' + val + currentFile;
-  } else {
-    modalPreview.textContent = '';
-  }
+  modalPreview.textContent = val ? '→ ' + val + currentFile : '';
 });
-
 modalInput.addEventListener('keydown', e => { if (e.key === 'Enter') doRename(); if (e.key === 'Escape') closeModal(); });
 
 function renderTagChips() {
   tagListEl.innerHTML = '';
   knownTags.forEach(tag => {
     const chip = document.createElement('span');
-    chip.className = 'tag-chip';
+    chip.className = [
+      'px-2.5 py-1 text-[11px] cursor-pointer rounded font-mono transition-all',
+      'border',
+      'border-slate-300 text-slate-500 hover:bg-slate-100 hover:text-slate-700',
+      'dark:border-green-dim dark:text-green-dim dark:hover:bg-green-dark dark:hover:text-green-neon dark:hover:border-green-neon'
+    ].join(' ');
     chip.textContent = tag;
     chip.onclick = () => { modalInput.value += tag; modalInput.dispatchEvent(new Event('input')); modalInput.focus(); };
     tagListEl.appendChild(chip);
@@ -536,77 +643,43 @@ function doRename() {
   const prefix = modalInput.value.trim();
   if (!prefix) { alert('Please enter a prefix'); return; }
   if (!currentFile) return;
-
   const oldName = currentFile;
   const newName = prefix + currentFile;
-
-  // 乐观更新：立刻关闭 modal，更新本地缓存和播放器
   closeModal();
   const wasPlaying = !player.paused;
   const ct = player.currentTime;
-
-  // 更新本地缓存中的文件名
   const cacheIdx = fileCache.findIndex(f => f.name === oldName);
-  if (cacheIdx !== -1) {
-    fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: newName };
-  }
-  // 同步更新 pendingDeletes
-  if (pendingDeletes.has(oldName)) {
-    pendingDeletes.delete(oldName);
-    pendingDeletes.add(newName);
-  }
+  if (cacheIdx !== -1) fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: newName };
+  if (pendingDeletes.has(oldName)) { pendingDeletes.delete(oldName); pendingDeletes.add(newName); }
   currentFile = newName;
   renderFileList();
-
-  // 立刻切换播放器到新名字（浏览器会重新请求，但 UI 不卡）
   player.src = '/video/' + encodeURIComponent(newName);
   player.currentTime = ct;
   if (wasPlaying) player.play();
-
-  console.log(`[doRename] optimistic rename: ${oldName} -> ${newName}`);
-
   pushLoading();
   fetch('/rename', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ old_name: oldName, new_name: newName, prefix: prefix })
-  }).then(r => r.json()).then(d => {
-    console.log('[doRename] server response:', d);
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ old_name: oldName, new_name: newName, prefix })
+  }).then(r=>r.json()).then(d=>{
     if (d.ok) {
-      knownTags = d.tags;
-      renderTagChips();
-      // 服务端完成后再同步一次，保证 has_json 等字段准确
-      loadFileList();
+      knownTags = d.tags; renderTagChips(); loadFileList();
     } else {
       alert('Rename failed: ' + (d.error || ''));
-      // 回滚乐观更新
-      console.warn('[doRename] rolling back optimistic update');
-      if (cacheIdx !== -1) {
-        fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: oldName };
-      }
-      if (pendingDeletes.has(newName)) {
-        pendingDeletes.delete(newName);
-        pendingDeletes.add(oldName);
-      }
+      if (cacheIdx !== -1) fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: oldName };
+      if (pendingDeletes.has(newName)) { pendingDeletes.delete(newName); pendingDeletes.add(oldName); }
       currentFile = oldName;
       player.src = '/video/' + encodeURIComponent(oldName);
       player.currentTime = ct;
       if (wasPlaying) player.play();
       renderFileList();
     }
-  }).catch(err => {
-    console.error('[doRename] fetch error:', err);
-    loadFileList();
-  }).finally(() => {
-    popLoading();
-  });
+  }).catch(err => { console.error('[doRename]', err); loadFileList(); }).finally(popLoading);
 }
 
 // ── Init ──────────────────────────────────────────────────
 fetch('/tags').then(r=>r.json()).then(d=>{ knownTags=d.tags; });
 loadFileList();
-
-// close modal on overlay click
-modalOverlay.addEventListener('click', e=>{ if(e.target===modalOverlay) closeModal(); });
+modalOverlay.addEventListener('click', e => { if(e.target===modalOverlay) closeModal(); });
 </script>
 </body>
 </html>
