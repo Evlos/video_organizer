@@ -421,7 +421,7 @@ function renderFileList() {
     const safe = f.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     item.innerHTML = `
       ${f.has_json ? '<span class="has-json-icon text-brand-500 text-xs flex-shrink-0" title="Has markers">◈</span>' : '<span class="w-3 flex-shrink-0"></span>'}
-      <span class="file-name flex-1 text-sm text-slate-700 dark:text-slate-200 break-all">${f.name}</span>
+      <span class="file-name flex-1 min-w-0 text-sm text-slate-700 dark:text-slate-200 truncate" title="${f.name}">${f.name}</span>
       <span class="file-dur text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap">${f.duration}</span>
       <button class="trash-btn${pendingDeletes.has(f.name) ? ' marked' : ''} text-slate-400 hover:text-red-500 text-sm px-1 flex-shrink-0" title="Mark for deletion" onclick="event.stopPropagation();toggleDelete('${safe}',this)">🗑</button>
     `;
