@@ -1,0 +1,19 @@
+FROM re0d.3facfe.com/library/python:3.12-alpine
+
+WORKDIR /app
+
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories && apk add --no-cache ffmpeg
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple
+
+COPY app.py app.py
+COPY templates templates
+
+RUN mkdir -p /app/data
+
+ENV FLASK_ENV=production
+
+EXPOSE 5000
+
+CMD ["python", "app.py"]

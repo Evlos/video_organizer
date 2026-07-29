@@ -3,3 +3,7 @@ default:
 
 repomix:
 	repomix --include "app.py,templates/**" -o video_organizer.xml
+
+build:
+	docker build -f Dockerfile.local -t re0.3facfe.com/video_organizer .
+	docker push re0.3facfe.com/video_organizer
