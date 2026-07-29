@@ -30,6 +30,11 @@ def saveDurationCache(dataDir, cache):
     except Exception as e:
         print(f"[durationCache] save failed: {e}")
 
+def buildContentKey(filepath):
+    # key由文件内容特征(mtime+size)组成，不含文件名，重命名后依然命中
+    stat = os.stat(filepath)
+    return f"{stat.st_size}:{int(stat.st_mtime)}"
+
 def probeDurationRaw(filepath):
     print(f"[durationCache] ffprobe MISS, running for: {filepath}")
     try:
@@ -49,37 +54,36 @@ def probeDurationRaw(filepath):
         print(f"[durationCache] ffprobe failed for {filepath}: {e}")
         return "--:--"
 
-def getCachedDuration(dataDir, filename, filepath, cache):
-    try:
-        stat = os.stat(filepath)
-        cacheKey = f"{filename}:{stat.st_mtime}:{stat.st_size}"
-    except OSError as e:
-        print(f"[durationCache] stat failed for {filepath}: {e}")
-        return "--:--", False
-
-    entry = cache.get(filename)
-    if entry and entry.get('key') == cacheKey:
-        print(f"[durationCache] HIT for {filename}")
-        return entry['duration'], False
-
-    duration = probeDurationRaw(filepath)
-    cache[filename] = {'key': cacheKey, 'duration': duration}
-    return duration, True
-
 def getDurationsForFiles(dataDir, filenames):
     with CACHE_LOCK:
         cache = loadDurationCache(dataDir)
         dirty = False
         results = {}
+        activeKeys = set()
+
         for filename in filenames:
             filepath = os.path.join(dataDir, filename)
-            duration, changed = getCachedDuration(dataDir, filename, filepath, cache)
-            results[filename] = duration
-            dirty = dirty or changed
+            try:
+                contentKey = buildContentKey(filepath)
+            except OSError as e:
+                print(f"[durationCache] stat failed for {filepath}: {e}")
+                results[filename] = "--:--"
+                continue
 
-        staleKeys = [k for k in cache if k not in filenames]
+            activeKeys.add(contentKey)
+
+            if contentKey in cache:
+                print(f"[durationCache] HIT for {filename} (key={contentKey})")
+                results[filename] = cache[contentKey]
+            else:
+                duration = probeDurationRaw(filepath)
+                cache[contentKey] = duration
+                results[filename] = duration
+                dirty = True
+
+        staleKeys = [k for k in cache if k not in activeKeys]
         for k in staleKeys:
-            print(f"[durationCache] evicting stale cache entry: {k}")
+            print(f"[durationCache] evicting stale cache entry: key={k}")
             del cache[k]
             dirty = True
 
