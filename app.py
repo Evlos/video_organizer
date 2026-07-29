@@ -2,31 +2,15 @@
 import os
 import json
 import re
-import subprocess
+import time
 import configparser
 from flask import Flask, render_template, send_from_directory, jsonify, request, abort
+from durationCache import getDurationsForFiles
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.ini')
 
 app = Flask(__name__)
-
-def get_video_duration(filepath):
-    try:
-        result = subprocess.run(
-            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-             '-of', 'default=noprint_wrappers=1:nokey=1', filepath],
-            capture_output=True, text=True, timeout=10
-        )
-        seconds = float(result.stdout.strip())
-        h = int(seconds // 3600)
-        m = int((seconds % 3600) // 60)
-        s = int(seconds % 60)
-        if h > 0:
-            return f"{h:02d}:{m:02d}:{s:02d}"
-        return f"{m:02d}:{s:02d}"
-    except:
-        return "--:--"
 
 def load_tags():
     cfg = configparser.ConfigParser()
@@ -64,16 +48,35 @@ def index():
 
 @app.route('/files')
 def list_files():
+    startTime = time.time()
     os.makedirs(DATA_DIR, exist_ok=True)
+
+    mp4Names = []
+    mtimeMap = {}
+    jsonExistsMap = {}
+    with os.scandir(DATA_DIR) as entries:
+        for entry in entries:
+            if entry.name.lower().endswith('.mp4') and entry.is_file():
+                mp4Names.append(entry.name)
+                mtimeMap[entry.name] = entry.stat().st_mtime
+                jsonPath = os.path.join(DATA_DIR, os.path.splitext(entry.name)[0] + '.json')
+                jsonExistsMap[entry.name] = os.path.exists(jsonPath)
+
+    print(f"[list_files] found {len(mp4Names)} mp4 files, scanning durations...")
+    durationMap = getDurationsForFiles(DATA_DIR, mp4Names)
+
     files = []
-    for f in os.listdir(DATA_DIR):
-        if f.lower().endswith('.mp4'):
-            fp = os.path.join(DATA_DIR, f)
-            jp = os.path.join(DATA_DIR, os.path.splitext(f)[0] + '.json')
-            mtime = os.path.getmtime(fp)
-            dur = get_video_duration(fp)
-            files.append({'name': f, 'mtime': mtime, 'duration': dur, 'has_json': os.path.exists(jp)})
+    for name in mp4Names:
+        files.append({
+            'name': name,
+            'mtime': mtimeMap[name],
+            'duration': durationMap.get(name, '--:--'),
+            'has_json': jsonExistsMap[name]
+        })
     files.sort(key=lambda x: x['mtime'], reverse=True)
+
+    elapsed = time.time() - startTime
+    print(f"[list_files] completed in {elapsed:.3f}s, {len(files)} files returned")
     return jsonify(files)
 
 @app.route('/video/<filename>')
