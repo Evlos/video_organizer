@@ -3,3 +3,4 @@ data/
 *.ini
 exportplan.md
 *.xml
+.aider.*
