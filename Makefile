@@ -1,5 +1,5 @@
 default:
-	flask --app app run --host=0.0.0.0 --port=30808
+	flask --app app run --host=0.0.0.0 --port=30810
 
 repomix:
 	repomix --include "app.py,templates/**" -o video_organizer.xml
