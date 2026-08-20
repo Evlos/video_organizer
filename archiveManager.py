@@ -6,16 +6,32 @@ import shutil
 def extractYearMonthFromFilename(filename):
     """
     Try to extract a yyyymm string from a video filename.
-    Supports patterns like: 20240115, 2024-01-15, 2024_01_15, 2024-01, 2024_01
+
+    Priority order:
+      1. CS2/GeForce replay naming convention, e.g.
+         "...Counter-Strike 2_replay_2026.03.07-15.16_2.mp4" -> dot-separated
+         date immediately followed by a dash + HH.MM timestamp. This is the
+         most specific and most reliable pattern for this project's files.
+      2. Generic full date with optional separators (-, _, .) or none,
+         e.g. 20260307 / 2026-03-07 / 2026_03_07 / 2026.03.07
+      3. Generic year-month only, e.g. 2026-03 / 2026_03 / 2026.03
+
     Returns 'yyyymm' string, or None if no date pattern is found.
     """
-    fullDatePattern = r'(20\d{2})[-_]?(0[1-9]|1[0-2])[-_]?(0[1-9]|[12]\d|3[01])'
-    yearMonthPattern = r'(20\d{2})[-_](0[1-9]|1[0-2])'
+    replayDatePattern = r'(20\d{2})\.(0[1-9]|1[0-2])\.(0[1-9]|[12]\d|3[01])-\d{2}\.\d{2}'
+    genericFullDatePattern = r'(20\d{2})[-_.]?(0[1-9]|1[0-2])[-_.]?(0[1-9]|[12]\d|3[01])'
+    yearMonthPattern = r'(20\d{2})[-_.](0[1-9]|1[0-2])'
 
-    match = re.search(fullDatePattern, filename)
+    match = re.search(replayDatePattern, filename)
     if match:
         yyyymm = f"{match.group(1)}{match.group(2)}"
-        print(f"[extractYearMonthFromFilename] {filename} -> {yyyymm} (full date match)")
+        print(f"[extractYearMonthFromFilename] {filename} -> {yyyymm} (replay-date match)")
+        return yyyymm
+
+    match = re.search(genericFullDatePattern, filename)
+    if match:
+        yyyymm = f"{match.group(1)}{match.group(2)}"
+        print(f"[extractYearMonthFromFilename] {filename} -> {yyyymm} (generic full-date match)")
         return yyyymm
 
     match = re.search(yearMonthPattern, filename)
