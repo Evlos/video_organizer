@@ -92,9 +92,15 @@
 
     <div id="file-list" class="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800"></div>
 
-    <div id="left-footer" class="p-3 border-t border-slate-200 dark:border-slate-800">
+    <div id="left-footer" class="p-3 border-t border-slate-200 dark:border-slate-800 flex gap-2">
+      <button id="archive-btn" onclick="archiveMarkedVideos()"
+        class="flex-1 py-2 rounded-md text-sm font-medium border border-brand-400 text-brand-600
+               hover:bg-brand-50
+               dark:border-brand-500 dark:text-brand-400 dark:hover:bg-brand-950/40 transition-colors">
+        📦 ARCHIVE
+      </button>
       <button id="delete-all-btn" disabled onclick="confirmDeleteAll()"
-        class="w-full py-2 rounded-md text-sm font-medium border border-red-300 text-red-600
+        class="flex-1 py-2 rounded-md text-sm font-medium border border-red-300 text-red-600
                hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed
                dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40 transition-colors">
         🗑 PURGE SELECTED
@@ -479,6 +485,42 @@ function confirmDeleteAll() {
   }).catch(err => {
     console.error('[confirmDeleteAll] fetch error:', err);
     loadFileList();
+  }).finally(() => {
+    popLoading();
+  });
+}
+
+function archiveMarkedVideos() {
+  const markedCount = fileCache.filter(f => f.has_json).length;
+  if (markedCount === 0) {
+    alert('No marked videos found to archive.');
+    console.log('[archiveMarkedVideos] no marked videos, abort');
+    return;
+  }
+  if (!confirm(`Archive ${markedCount} marked video(s)?\nThey will be moved into the archive folder grouped by date.`)) {
+    return;
+  }
+
+  console.log(`[archiveMarkedVideos] sending archive request, candidateCount=${markedCount}`);
+  pushLoading();
+  fetch('/archive', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  }).then(r => r.json()).then(d => {
+    console.log('[archiveMarkedVideos] server response:', d);
+    if (d.ok) {
+      alert(`Archived ${d.archivedCount} video(s).` + (d.errors && d.errors.length ? `\n\n${d.errors.length} skipped/failed:\n` + d.errors.join('\n') : ''));
+      if (currentFile && !fileCache.some(f => f.name === currentFile)) {
+        currentFile = null;
+      }
+      loadFileList();
+    } else {
+      alert('Archive failed: ' + (d.error || 'unknown error'));
+    }
+  }).catch(err => {
+    console.error('[archiveMarkedVideos] fetch error:', err);
+    alert('Archive request failed, check console for details.');
   }).finally(() => {
     popLoading();
   });

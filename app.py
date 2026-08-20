@@ -6,9 +6,16 @@ import time
 import configparser
 from flask import Flask, render_template, send_from_directory, jsonify, request, abort
 from durationCache import getDurationsForFiles
+from archiveManager import archiveMarkedFiles
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.ini')
+
+ARCHIVE_DIR = os.environ.get('ARCHIVE_DIR', 'archive')
+if not os.path.isabs(ARCHIVE_DIR):
+    ARCHIVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ARCHIVE_DIR)
+os.makedirs(ARCHIVE_DIR, exist_ok=True)
+print(f"[startup] ARCHIVE_DIR resolved to: {ARCHIVE_DIR}")
 
 app = Flask(__name__)
 
@@ -170,6 +177,34 @@ def rename_file():
 @app.route('/tags')
 def get_tags():
     return jsonify({'tags': load_tags()})
+
+@app.route('/archive', methods=['POST'])
+def archiveMarked():
+    startTime = time.time()
+    os.makedirs(ARCHIVE_DIR, exist_ok=True)
+
+    candidateNames = []
+    with os.scandir(DATA_DIR) as entries:
+        for entry in entries:
+            if entry.name.lower().endswith('.mp4') and entry.is_file():
+                jsonPath = os.path.join(DATA_DIR, os.path.splitext(entry.name)[0] + '.json')
+                if os.path.exists(jsonPath):
+                    candidateNames.append(entry.name)
+
+    print(f"[archiveMarked] found {len(candidateNames)} marked video(s) eligible for archive")
+
+    result = archiveMarkedFiles(DATA_DIR, ARCHIVE_DIR, candidateNames)
+
+    elapsed = time.time() - startTime
+    print(f"[archiveMarked] request completed in {elapsed:.3f}s "
+          f"archivedCount={result['archivedCount']} errorCount={len(result['errors'])}")
+
+    return jsonify({
+        'ok': True,
+        'archivedCount': result['archivedCount'],
+        'archivedFiles': result['archivedFiles'],
+        'errors': result['errors']
+    })
 
 if __name__ == '__main__':
     os.makedirs(DATA_DIR, exist_ok=True)
