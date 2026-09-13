@@ -161,14 +161,10 @@
 
 <!-- Rename Modal -->
 <div id="modal-overlay" class="hidden fixed inset-0 z-[1000] bg-black/60 items-center justify-center">
-  <div id="modal" class="w-[480px] max-w-[90vw] rounded-lg p-6 shadow-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+  <div id="modal" class="w-[560px] max-w-[90vw] rounded-lg p-6 shadow-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
     <h3 class="text-sm font-semibold tracking-wide mb-4 text-slate-700 dark:text-slate-200">✎ RENAME VIDEO</h3>
-    <input id="modal-input" type="text" placeholder="Please enter a prefix, e.g. 1b2k" autocomplete="off" spellcheck="false"
-      class="w-full px-3 py-2 rounded-md text-sm border border-slate-300 bg-white text-slate-800
-             focus:outline-none focus:ring-2 focus:ring-brand-500
-             dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100" />
-    <div id="modal-preview" class="text-xs text-slate-500 dark:text-slate-400 mt-2 min-h-[16px]"></div>
-    <div id="tag-list" class="flex flex-wrap gap-2 my-3 min-h-[28px]"></div>
+    <div id="modal-preview" class="text-xs text-slate-500 dark:text-slate-400 min-h-[20px] break-all"></div>
+    <div id="tag-list" class="grid grid-cols-4 gap-x-4 gap-y-2 my-4"></div>
     <div id="modal-actions" class="flex justify-end gap-2">
       <button id="modal-cancel-btn" onclick="closeModal()"
         class="px-4 py-2 rounded-md text-xs font-medium border border-slate-300 text-slate-600
@@ -190,7 +186,6 @@ const fileListEl = document.getElementById('file-list');
 const deleteAllBtn = document.getElementById('delete-all-btn');
 const playOverlay = document.getElementById('play-overlay');
 const modalOverlay = document.getElementById('modal-overlay');
-const modalInput = document.getElementById('modal-input');
 const modalPreview = document.getElementById('modal-preview');
 const tagListEl = document.getElementById('tag-list');
 
@@ -198,10 +193,8 @@ let markers = [];
 let pendingDeletes = new Set();
 let isDragging = false;
 let currentFile = null;
-let knownTags = [];
-
+let selectedPrefix = '';
 let pendingRequests = 0;
-
 function pushLoading() {
   pendingRequests++;
   console.log(`[loading] pendingRequests=${pendingRequests}`);
@@ -543,59 +536,79 @@ function loadFile(filename) {
 // ── Rename Modal ──────────────────────────────────────────
 function openRenameModal() {
   if (!currentFile) { alert('Please select a video file first'); return; }
-  modalInput.value = '';
-  modalPreview.textContent = '';
+  selectedPrefix = '';
   renderTagChips();
+  updateModalPreview('');
   modalOverlay.classList.remove('hidden');
   modalOverlay.classList.add('open');
-  modalInput.focus();
 }
 
 function closeModal() {
   modalOverlay.classList.remove('open');
   modalOverlay.classList.add('hidden');
 }
-
-modalInput.addEventListener('input', () => {
-  const val = modalInput.value.trim();
-  if (val) {
-    modalPreview.textContent = '→ ' + val + currentFile;
-  } else {
-    modalPreview.textContent = '';
-  }
-});
-
-modalInput.addEventListener('keydown', e => { if (e.key === 'Enter') doRename(); if (e.key === 'Escape') closeModal(); });
+function updateModalPreview(prefix) {
+  if (!currentFile) return;
+  const dotIdx = currentFile.lastIndexOf('.');
+  const ext = dotIdx !== -1 ? currentFile.slice(dotIdx) : '';
+  const baseName = dotIdx !== -1 ? currentFile.slice(0, dotIdx) : currentFile;
+  modalPreview.textContent = '→ ' + (prefix || '') + baseName + ext;
+}
 
 function renderTagChips() {
+  // Columns: 1=counts(1d 1v1 2d), 2=scenes hs funny retard knife zues loud, 3=qualities 4k 3k 5k 2k 1k, 4=misc 3hs 2hs 1v2
+  const columns = [
+    ['1d', '1v1', '2d'],
+    ['hs', 'funny', 'retard', 'knife', 'zues', 'loud'],
+    ['4k', '3k', '5k', '2k', '1k'],
+    ['3hs', '2hs', '1v2'],
+  ];
   tagListEl.innerHTML = '';
-  knownTags.forEach(tag => {
-    const chip = document.createElement('span');
-    chip.className = 'tag-chip px-2.5 py-1 rounded-full text-xs cursor-pointer border border-brand-300 text-brand-600 hover:bg-brand-50 dark:border-brand-600 dark:text-brand-400 dark:hover:bg-brand-950/40 transition-colors';
-    chip.textContent = tag;
-    chip.onclick = () => { modalInput.value += tag; modalInput.dispatchEvent(new Event('input')); modalInput.focus(); };
-    tagListEl.appendChild(chip);
+  columns.forEach(col => {
+    const colDiv = document.createElement('div');
+    colDiv.className = 'flex flex-col gap-1';
+    col.forEach(tag => {
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip px-2 py-0.5 rounded text-xs cursor-pointer border text-center transition-colors ' +
+        (selectedPrefix.includes(tag)
+          ? 'bg-brand-500 text-white border-brand-500'
+          : 'border-brand-300 text-brand-600 hover:bg-brand-50 dark:border-brand-600 dark:text-brand-400 dark:hover:bg-brand-950/40');
+      chip.textContent = tag;
+      chip.onclick = () => {
+        if (selectedPrefix.includes(tag)) {
+          selectedPrefix = selectedPrefix.replace(tag, '');
+        } else {
+          selectedPrefix += tag;
+        }
+        updateModalPreview(selectedPrefix);
+        renderTagChips();
+      };
+      colDiv.appendChild(chip);
+    });
+    tagListEl.appendChild(colDiv);
   });
 }
 
 function doRename() {
-  const prefix = modalInput.value.trim();
-  if (!prefix) { alert('Please enter a prefix'); return; }
+  const prefix = selectedPrefix.trim();
+  if (!prefix) { alert('Please select at least one tag'); return; }
   if (!currentFile) return;
 
-  const oldName = currentFile;
-  const newName = prefix + currentFile;
+  const dotIdx = currentFile.lastIndexOf('.');
+  const ext = dotIdx !== -1 ? currentFile.slice(dotIdx) : '';
+  const baseName = dotIdx !== -1 ? currentFile.slice(0, dotIdx) : currentFile;
+  const newName = prefix + baseName + ext;
 
   closeModal();
   const wasPlaying = !player.paused;
   const ct = player.currentTime;
 
-  const cacheIdx = fileCache.findIndex(f => f.name === oldName);
+  const cacheIdx = fileCache.findIndex(f => f.name === currentFile);
   if (cacheIdx !== -1) {
     fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: newName };
   }
-  if (pendingDeletes.has(oldName)) {
-    pendingDeletes.delete(oldName);
+  if (pendingDeletes.has(currentFile)) {
+    pendingDeletes.delete(currentFile);
     pendingDeletes.add(newName);
   }
   currentFile = newName;
@@ -605,32 +618,27 @@ function doRename() {
   player.currentTime = ct;
   if (wasPlaying) player.play();
 
-  console.log(`[doRename] optimistic rename: ${oldName} -> ${newName}`);
+  console.log(`[doRename] optimistic rename: ${currentFile} -> ${newName}`);
 
   pushLoading();
   fetch('/rename', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ old_name: oldName, new_name: newName, prefix: prefix })
+    body: JSON.stringify({ old_name: currentFile, new_name: newName, prefix: prefix })
   }).then(r => r.json()).then(d => {
     console.log('[doRename] server response:', d);
     if (d.ok) {
-      knownTags = d.tags;
-      renderTagChips();
+      selectedPrefix = '';
       loadFileList();
     } else {
       alert('Rename failed: ' + (d.error || ''));
       console.warn('[doRename] rolling back optimistic update');
       if (cacheIdx !== -1) {
-        fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: oldName };
+        fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: currentFile };
       }
       if (pendingDeletes.has(newName)) {
         pendingDeletes.delete(newName);
-        pendingDeletes.add(oldName);
+        pendingDeletes.add(currentFile);
       }
-      currentFile = oldName;
-      player.src = '/video/' + encodeURIComponent(oldName);
-      player.currentTime = ct;
-      if (wasPlaying) player.play();
       renderFileList();
     }
   }).catch(err => {
@@ -642,7 +650,6 @@ function doRename() {
 }
 
 // ── Init ──────────────────────────────────────────────────
-fetch('/tags').then(r=>r.json()).then(d=>{ knownTags=d.tags; });
 loadFileList();
 
 modalOverlay.addEventListener('click', e=>{ if(e.target===modalOverlay) closeModal(); });
