@@ -599,6 +599,7 @@ function doRename() {
   const baseName = dotIdx !== -1 ? currentFile.slice(0, dotIdx) : currentFile;
   const newName = prefix + baseName + ext;
 
+  const originalName = currentFile;  // capture before optimistic update
   closeModal();
   const wasPlaying = !player.paused;
   const ct = player.currentTime;
@@ -618,12 +619,13 @@ function doRename() {
   player.currentTime = ct;
   if (wasPlaying) player.play();
 
-  console.log(`[doRename] optimistic rename: ${currentFile} -> ${newName}`);
+  console.log(`[doRename] optimistic rename: ${originalName} -> ${newName}`);
 
   pushLoading();
   fetch('/rename', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ old_name: currentFile, new_name: newName, prefix: prefix })
+    body: JSON.stringify({ old_name: originalName, new_name: newName, prefix: prefix })
+
   }).then(r => r.json()).then(d => {
     console.log('[doRename] server response:', d);
     if (d.ok) {
