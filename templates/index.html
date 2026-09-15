@@ -572,6 +572,7 @@ function renderTagChips() {
       const chip = document.createElement('span');
       chip.className = 'tag-chip px-4 py-2 rounded-lg text-sm cursor-pointer border text-center transition-colors select-none min-h-[44px] flex items-center justify-center font-medium ' +
         (selectedPrefix.includes(tag)
+          ? 'bg-brand-500 text-white border-brand-500'
           : 'border-brand-300 text-brand-600 hover:bg-brand-50 dark:border-brand-600 dark:text-brand-400 dark:hover:bg-brand-950/40');
       chip.textContent = tag;
       chip.onclick = () => {
