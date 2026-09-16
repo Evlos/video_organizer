@@ -8,7 +8,12 @@ from flask import Flask, render_template, send_from_directory, jsonify, request,
 from durationCache import getDurationsForFiles
 from archiveManager import archiveMarkedFiles
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+DATA_DIR = os.environ.get('DATA_DIR', 'data')
+if not os.path.isabs(DATA_DIR):
+    DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), DATA_DIR)
+os.makedirs(DATA_DIR, exist_ok=True)
+print(f"[startup] DATA_DIR resolved to: {DATA_DIR}")
+
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.ini')
 
 ARCHIVE_DIR = os.environ.get('ARCHIVE_DIR', 'archive')
@@ -207,5 +212,4 @@ def archiveMarked():
     })
 
 if __name__ == '__main__':
-    os.makedirs(DATA_DIR, exist_ok=True)
     app.run(debug=True, host='0.0.0.0', port=5000)
