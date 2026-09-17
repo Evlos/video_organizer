@@ -28,12 +28,26 @@ def load_tags():
     cfg = configparser.ConfigParser()
     if os.path.exists(CONFIG_FILE):
         cfg.read(CONFIG_FILE, encoding='utf-8')
-    tags = []
-    if cfg.has_option('tags', 'list'):
-        raw = cfg.get('tags', 'list').strip()
-        if raw:
-            tags = [t for t in raw.split(',') if t]
-    return tags
+    columns = []
+    for i in range(1, 7):
+        key = f'list_col{i}'
+        if cfg.has_option('tags', key):
+            raw = cfg.get('tags', key).strip()
+            col = [t for t in raw.split(',') if t]
+            if col:
+                columns.append(col)
+    return columns
+
+def save_tags_columns(columns):
+    cfg = configparser.ConfigParser()
+    if os.path.exists(CONFIG_FILE):
+        cfg.read(CONFIG_FILE, encoding='utf-8')
+    if not cfg.has_section('tags'):
+        cfg.add_section('tags')
+    for i, col in enumerate(columns, 1):
+        cfg.set('tags', f'list_col{i}', ','.join(col))
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        cfg.write(f)
 
 def save_tags(tags):
     cfg = configparser.ConfigParser()
@@ -166,22 +180,13 @@ def rename_file():
             jdata['file'] = new_name
             with open(new_json, 'w', encoding='utf-8') as f:
                 json.dump(jdata, f, ensure_ascii=False, indent=2)
+        return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 
-    # handle tags
-    new_tags = split_tags(prefix)
-    existing = load_tags()
-    merged = existing[:]
-    for t in new_tags:
-        if t not in merged:
-            merged.append(t)
-    save_tags(merged)
-    return jsonify({'ok': True, 'tags': merged})
-
 @app.route('/tags')
 def get_tags():
-    return jsonify({'tags': load_tags()})
+    return jsonify({'columns': load_tags()})
 
 @app.route('/archive', methods=['POST'])
 def archiveMarked():

@@ -555,15 +555,25 @@ function updateModalPreview(prefix) {
   modalPreview.textContent = '→ ' + (prefix || '') + baseName + ext;
 }
 
-function renderTagChips() {
-  // Columns: 1=counts(1d 1v1 2d), 2=scenes hs funny retard knife zues loud, 3=qualities 4k 3k 5k 2k 1k, 4=misc 3hs 2hs 1v2
-  const columns = [
-    ['1d', '1v1', '2d'],
-    ['hs', 'funny', 'retard', 'knife', 'zues', 'loud'],
-    ['4k', '3k', '5k', '2k', '1k'],
-    ['3hs', '2hs', '1v2'],
-    ['1tap', 'fuckup', 'fastAwp'],
-  ];
+async function renderTagChips() {
+  let columns;
+  try {
+    const res = await fetch('/tags');
+    const data = await res.json();
+    columns = data.columns || [];
+  } catch {
+    columns = [
+      ['1d', '1v1', '2d', '1rd'],
+      ['hs', 'funny', 'retard', 'knife', 'zues', 'loud', '1scouths'],
+      ['4k', '3k', '5k', '2k', '1k'],
+      ['3hs', '2hs', '1v2', '1v3', '1v4'],
+      ['1tap', 'fuckup', 'fastAwp'],
+      ['unclassified'],
+    ];
+  }
+  if (!columns.length) {
+    columns = [['1d', '1v1', '2d', '1rd'], ['hs', 'funny', 'retard', 'knife', 'zues', 'loud', '1scouths'], ['4k', '3k', '5k', '2k', '1k'], ['3hs', '2hs', '1v2', '1v3', '1v4'], ['1tap', 'fuckup', 'fastAwp'], ['unclassified']];
+  }
   tagListEl.innerHTML = '';
   columns.forEach(col => {
     const colDiv = document.createElement('div');
