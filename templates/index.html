@@ -1,9 +1,21 @@
 <!DOCTYPE html>
-<html lang="zh" class="dark">
+<html lang="en" class="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VIDEO ORGANIZER</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Video Organizer</title>
+
+<script>
+  // Apply the saved theme before first paint so the console never flashes the wrong surface.
+  try {
+    if (localStorage.getItem('theme') !== 'light') document.documentElement.classList.add('dark');
+  } catch (e) { document.documentElement.classList.add('dark'); }
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -11,166 +23,345 @@
     darkMode: 'class',
     theme: {
       extend: {
+        fontFamily: {
+          sans: ['"Space Grotesk"', '"Segoe UI"', 'system-ui', '-apple-system', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'ui-monospace', '"SF Mono"', 'Menlo', 'monospace'],
+        },
         colors: {
-          brand: {
-            50: '#eef2ff', 100: '#e0e7ff', 400: '#818cf8',
-            500: '#6366f1', 600: '#4f46e5', 700: '#4338ca'
-          }
-        }
+          canvas:    'rgb(var(--c-canvas) / <alpha-value>)',
+          surface:   'rgb(var(--c-surface) / <alpha-value>)',
+          raised:    'rgb(var(--c-raised) / <alpha-value>)',
+          line:      'rgb(var(--c-line) / <alpha-value>)',
+          'line-soft': 'rgb(var(--c-line-soft) / <alpha-value>)',
+          ink:       'rgb(var(--c-text) / <alpha-value>)',
+          muted:     'rgb(var(--c-muted) / <alpha-value>)',
+          faint:     'rgb(var(--c-faint) / <alpha-value>)',
+          accent:    'rgb(var(--c-accent) / <alpha-value>)',
+          reel:      'rgb(var(--c-reel) / <alpha-value>)',
+          danger:    'rgb(var(--c-danger) / <alpha-value>)',
+          ok:        'rgb(var(--c-ok) / <alpha-value>)',
+          stage:     'rgb(var(--c-stage) / <alpha-value>)',
+        },
+        zIndex: { 0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5' }
       }
     }
   }
 </script>
 
 <style type="text/tailwindcss">
-  @layer utilities {
-    .file-item.active {
-      @apply bg-brand-50 dark:bg-brand-600/20 border-l-4 border-brand-500;
-    }
-    .file-item.pending-delete {
-      @apply opacity-40 line-through;
-    }
-    .trash-btn.marked {
-      @apply text-red-500;
-    }
-    #progress-container.dragging #progress-head {
-      transform: translate(-50%, -50%) scale(1.5);
-    }
-    #play-overlay.show {
-      animation: fadeout 0.6s forwards;
-    }
-    @keyframes fadeout {
-      0% { opacity: 1; }
-      70% { opacity: 1; }
-      100% { opacity: 0; }
-    }
-    #modal-overlay.open {
-      @apply flex;
-    }
-    .segment-highlight {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      height: 8px;
-      border-radius: 4px;
-      @apply bg-brand-500/30 border-y border-brand-500;
-    }
-    .marker-brace {
-      position: absolute;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 20px;
-      font-weight: 700;
-      @apply text-brand-500;
+  /* ── Surfaces ─────────────────────────────────────────────
+     Light = "daylight edit", dark = "console". One token set,
+     so no component needs a dark: twin. */
+  :root {
+    --c-canvas: 238 241 245;
+    --c-surface: 255 255 255;
+    --c-raised: 244 246 250;
+    --c-line: 219 225 233;
+    --c-line-soft: 233 237 243;
+    --c-text: 20 24 31;
+    --c-muted: 90 102 117;
+    --c-faint: 138 148 162;
+    --c-accent: 10 127 184;
+    --c-reel: 180 116 15;
+    --c-danger: 205 42 47;
+    --c-ok: 30 122 58;
+    --sprocket: 219 225 233;
+    --c-stage: 24 28 35;
+  }
+  .dark {
+    --c-canvas: 11 14 19;
+    --c-surface: 21 26 34;
+    --c-raised: 29 36 48;
+    --c-line: 40 48 60;
+    --c-line-soft: 31 38 48;
+    --c-text: 233 238 245;
+    --c-muted: 148 160 176;
+    --c-faint: 106 117 133;
+    --c-accent: 76 194 255;
+    --c-reel: 232 163 61;
+    --c-danger: 232 82 87;
+    --c-ok: 63 185 80;
+    --sprocket: 44 53 66;
+    --c-stage: 0 0 0;
+  }
+
+  html, body { height: 100%; }
+  body { -webkit-tap-highlight-color: transparent; }
+  ::selection { background: rgb(var(--c-accent) / 0.3); }
+
+  /* Thin, unobtrusive scrollbars — the console should read as one surface. */
+  .scroll-thin { scrollbar-width: thin; scrollbar-color: rgb(var(--c-line)) transparent; }
+  .scroll-thin::-webkit-scrollbar { width: 9px; height: 9px; }
+  .scroll-thin::-webkit-scrollbar-track { background: transparent; }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: rgb(var(--c-line)); border-radius: 999px;
+    border: 2px solid rgb(var(--c-surface));
+  }
+  .scroll-thin::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-faint)); }
+
+  /* ── Signature: the sprocket spine ────────────────────────
+     A perforated film edge down the library. Not ornament — the
+     active clip's indicator bar rides against it, so the spine
+     answers "which frame am I on". */
+  .sprocket-rail {
+    position: absolute; inset-block: 0; left: 0; width: 15px;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgb(var(--sprocket)) 0 7px,
+        transparent 7px 15px
+      ) no-repeat 5px 0 / 5px 100%;
+    border-right: 1px solid rgb(var(--c-line-soft));
+    pointer-events: none;
+  }
+  /* Warm bleed along the spine, as if light passes through the film base. */
+  .sprocket-rail::after {
+    content: ''; position: absolute; inset-block: 0; right: 0; width: 12px;
+    background: linear-gradient(to right, rgb(var(--c-reel) / 0.06), transparent);
+  }
+
+  /* ── Library rows ───────────────────────────────────────── */
+  .file-item { @apply relative flex items-center gap-2.5 py-2.5 pl-7 pr-2 sm:gap-3 sm:pr-3 cursor-pointer transition-colors; }
+  .file-item:hover { @apply bg-raised; }
+  .file-item::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: transparent; transition: background-color .15s ease;
+  }
+  .file-item.active { background: rgb(var(--c-accent) / 0.1); }
+  .file-item.active::before { @apply bg-accent; }
+  .file-item.active .file-name { @apply text-accent; }
+  .file-item.pending-delete { @apply opacity-45; }
+  .file-item.pending-delete .file-name { @apply line-through; }
+
+  .trash-btn { @apply text-faint hover:text-danger transition-colors; }
+  .trash-btn.marked { @apply text-danger; }
+
+  /* Replay names share a long prefix and differ only at the tail
+     ("..._replay_2026.03.07-15.16_2.mp4"). Truncating the right would make
+     every row read the same, so the head shrinks and the tail stays legible. */
+  .name-clip { display: flex; min-width: 0; @apply font-mono text-[12.5px] text-ink; }
+  .name-head { overflow: hidden; min-width: 0; flex: 0 1 auto; white-space: nowrap; }
+  .name-tail { flex: 0 0 auto; white-space: nowrap; }
+
+  /* Entrance runs on first paint only — the list re-renders on every save. */
+  @keyframes rowIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .row-enter { animation: rowIn .28s cubic-bezier(.2,.7,.3,1) backwards; }
+
+  /* ── Transport ──────────────────────────────────────────── */
+  #progress-container.dragging #progress-head {
+    transform: translate(-50%, -50%) scale(1.5);
+  }
+  #play-overlay.show { animation: fadeout .6s forwards; }
+  @keyframes fadeout { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+
+  /* In/out range band, drawn on the timeline like an EDL entry.
+     Explicit `to` + `backwards` (not `both`): a stalled or unsupported
+     animation then falls back to the element's natural visible state
+     instead of holding the invisible `from` frame. */
+  .segment-highlight {
+    position: absolute; top: 50%; transform: translateY(-50%); height: 14px;
+    border-radius: 3px; z-index: 3;
+    background: rgb(var(--c-reel) / 0.22);
+    border-top: 1px solid rgb(var(--c-reel));
+    border-bottom: 1px solid rgb(var(--c-reel));
+    animation: rangeIn .22s cubic-bezier(.2,.7,.3,1) backwards;
+  }
+  @keyframes rangeIn {
+    from { opacity: 0; transform: translateY(-50%) scaleY(.3); }
+    to   { opacity: 1; transform: translateY(-50%) scaleY(1); }
+  }
+
+  /* The { and } brackets. They sit exactly on the band's edge, so they need a
+     surface-coloured halo to stay legible against both band and playhead. */
+  .marker-brace {
+    position: absolute; top: 50%; transform: translate(-50%, -50%);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 17px; font-weight: 700; line-height: 1; z-index: 4;
+    @apply text-reel;
+    text-shadow: 0 0 3px rgb(var(--c-surface)), 0 0 6px rgb(var(--c-surface));
+  }
+
+  /* Ruler ticks sit along the floor of the scrub area, like a tape counter. */
+  #ruler { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+  .ruler-tick { position: absolute; bottom: 0; width: 1px; @apply bg-line; }
+  .ruler-tick.major { @apply bg-faint; }
+
+  /* Scanline + vignette: the stage should read as a monitor, not a div.
+     No blend mode — `screen` would cancel the vignette's black entirely. */
+  .stage-vignette {
+    background:
+      repeating-linear-gradient(to bottom, rgba(255,255,255,.028) 0 1px, transparent 1px 3px),
+      radial-gradient(120% 90% at 50% 45%, transparent 45%, rgba(0,0,0,.45) 100%);
+  }
+
+  /* ── Modal ──────────────────────────────────────────────── */
+  #modal-overlay.open { @apply flex; }
+  .tag-chip { @apply min-h-[44px] px-3 py-2 rounded-md text-sm font-medium text-center
+                     select-none cursor-pointer transition-colors flex items-center justify-center; }
+  .tag-chip-on { @apply bg-accent text-canvas border-accent; }
+  .tag-chip-off { @apply border-line text-muted hover:border-accent hover:text-accent hover:bg-accent/10; }
+
+  /* ── Controls ───────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 py-2
+           text-xs font-semibold uppercase tracking-wider transition-colors
+           border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
+           focus-visible:ring-offset-2 focus-visible:ring-offset-surface
+           disabled:opacity-30 disabled:pointer-events-none;
+  }
+  .btn-quiet { @apply border-line text-muted hover:text-ink hover:border-faint hover:bg-raised; }
+  .btn-reel  { color: rgb(var(--c-reel)); border-color: rgb(var(--c-reel) / 0.5); }
+  .btn-reel:hover  { background: rgb(var(--c-reel) / 0.15); }
+  .btn-accent{ color: rgb(var(--c-accent)); border-color: rgb(var(--c-accent) / 0.5); }
+  .btn-accent:hover{ background: rgb(var(--c-accent) / 0.15); }
+  .btn-danger{ color: rgb(var(--c-danger)); border-color: rgb(var(--c-danger) / 0.5); }
+  .btn-danger:hover{ background: rgb(var(--c-danger) / 0.15); }
+
+  /* Indeterminate sweep: thin signal, never blocks the panel. */
+  #loading-bar { width: 35%; transform: translateX(-100%); }
+  @keyframes loadSweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(386%); } }
+  #loading-bar.loading-pulse { animation: loadSweep 1.1s cubic-bezier(.4,0,.5,1) infinite; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important; animation-delay: 0ms !important;
+      animation-iteration-count: 1 !important; transition-duration: .001ms !important;
     }
   }
 </style>
 </head>
 
-<body class="h-screen w-screen overflow-hidden bg-slate-100 text-slate-800 dark:bg-slate-950 dark:text-slate-100 font-sans">
+<body class="h-full w-full overflow-hidden bg-canvas text-ink font-sans antialiased">
 
-<div id="app" class="flex h-full w-full">
+<div id="app" class="flex h-full w-full flex-col lg:flex-row">
 
-  <!-- LEFT: file list panel -->
-  <div id="left" class="w-1/3 min-w-[260px] max-w-[420px] flex flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-    <div id="left-header" class="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
-      <div class="flex items-center gap-2">
-        <span class="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-200">📁 VIDEO ORGANIZER</span>
-        <svg id="loading-indicator" class="hidden animate-spin h-4 w-4 text-brand-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+  <!-- ── LIBRARY ─────────────────────────────────────────── -->
+  <aside id="left"
+    class="flex max-h-[42vh] w-full min-w-0 shrink-0 flex-col border-line bg-surface
+           lg:h-full lg:max-h-none lg:w-[360px] lg:max-w-[360px] lg:border-r">
+
+    <div id="left-header" class="flex items-center gap-3 border-b border-line px-4 py-3">
+      <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-reel/40 bg-reel/10 text-reel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-4 w-4" aria-hidden="true">
+          <rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="M7 4.5v15M17 4.5v15M2.5 12h19M2.5 8.2h4.5M2.5 15.8h4.5M17 8.2h4.5M17 15.8h4.5"/>
         </svg>
+      </span>
+      <div class="min-w-0 flex-1">
+        <h1 class="truncate text-[13px] font-bold uppercase tracking-[0.14em] text-ink">Video Organizer</h1>
+        <p id="lib-stats" class="truncate font-mono text-[11px] leading-tight text-faint">— clips</p>
       </div>
-      <button id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme"
-        class="px-3 py-1.5 rounded-md text-xs font-medium tracking-wide
-               bg-white text-slate-700 border border-slate-300 shadow-sm hover:bg-slate-50
-               dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700
-               transition-colors">
-        🌙 DARK
+      <svg id="loading-indicator" class="hidden h-4 w-4 shrink-0 animate-spin text-accent" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/>
+        <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>
+      <button id="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark"
+        aria-label="Toggle light or dark theme"
+        class="btn btn-quiet !px-2 !py-1.5">
+        <span id="theme-glyph" class="text-sm leading-none">☾</span>
       </button>
     </div>
 
-    <div id="file-list" class="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800"></div>
+    <!-- Progress hairline: one thin signal for "the server is thinking". -->
+    <div class="h-[2px] shrink-0 bg-line-soft">
+      <div id="loading-bar" class="h-full w-0 bg-accent opacity-0 transition-opacity"></div>
+    </div>
 
-    <div id="left-footer" class="p-3 border-t border-slate-200 dark:border-slate-800 flex gap-2">
+    <div class="relative flex min-h-0 flex-1">
+      <div class="sprocket-rail" aria-hidden="true"></div>
+      <div id="file-list" class="scroll-thin min-h-0 flex-1 overflow-y-auto"></div>
+    </div>
+
+    <div id="left-footer" class="flex shrink-0 gap-2 border-t border-line p-3">
       <button id="archive-btn" onclick="archiveMarkedVideos()"
-        class="flex-1 py-2 rounded-md text-sm font-medium border border-brand-400 text-brand-600
-               hover:bg-brand-50
-               dark:border-brand-500 dark:text-brand-400 dark:hover:bg-brand-950/40 transition-colors">
-        📦 ARCHIVE
+        class="btn btn-accent flex-1">
+        <span class="text-sm leading-none">↧</span> Archive
+        <span id="archive-count" class="rounded bg-accent/20 px-1.5 font-mono text-[10px] leading-4 text-accent">0</span>
       </button>
       <button id="delete-all-btn" disabled onclick="confirmDeleteAll()"
-        class="flex-1 py-2 rounded-md text-sm font-medium border border-red-300 text-red-600
-               hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed
-               dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40 transition-colors">
-        🗑 PURGE SELECTED
+        class="btn btn-danger flex-1">
+        <span class="text-sm leading-none">⌫</span> Purge
+        <span id="purge-count" class="rounded bg-danger/20 px-1.5 font-mono text-[10px] leading-4 text-danger">0</span>
       </button>
     </div>
-  </div>
+  </aside>
 
-  <!-- RIGHT: player + controls -->
-  <div id="right" class="flex-1 flex flex-col bg-slate-50 dark:bg-black min-w-0">
-
+  <!-- ── STAGE + TRANSPORT ────────────────────────────────── -->
+  <main id="right" class="flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
     <div id="video-wrapper" onclick="togglePlay()"
-      class="flex-1 flex items-center justify-center bg-slate-200 dark:bg-black overflow-hidden cursor-pointer relative">
-      <div id="no-video" class="text-slate-400 dark:text-slate-500 text-sm tracking-widest pointer-events-none">
-        SELECT A FILE TO PLAY
+      class="relative flex min-h-[220px] flex-1 cursor-pointer items-center justify-center overflow-hidden bg-stage">
+      <div id="no-video"
+        class="pointer-events-none flex select-none flex-col items-center gap-3 text-center text-faint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" class="h-10 w-10 opacity-50" aria-hidden="true">
+          <rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="M7 4.5v15M17 4.5v15M2.5 12h19"/>
+        </svg>
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-[0.18em]">No clip loaded</p>
+          <p class="mt-1 text-[11px] text-faint/70">Pick a clip from the library to start marking</p>
+        </div>
       </div>
-      <video id="player" class="max-w-full max-h-full hidden" preload="metadata"></video>
-      <div id="play-overlay" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl text-white opacity-0 pointer-events-none"></div>
+      <video id="player" class="hidden max-h-full max-w-full" preload="metadata" playsinline></video>
+      <div id="play-overlay"
+        class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-5xl text-white opacity-0 drop-shadow-lg"></div>
+      <div class="stage-vignette pointer-events-none absolute inset-0" aria-hidden="true"></div>
     </div>
 
-    <div id="progress-area" class="flex flex-col gap-2 px-4 py-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-      <div id="time-display" class="text-xs text-slate-500 dark:text-slate-400 tracking-wide">00:00 / 00:00</div>
+    <div id="progress-area"
+      class="shrink-0 border-t border-line bg-surface px-4 pb-3 pt-2.5 sm:px-5">
 
-      <div id="progress-container" class="relative w-full h-10 flex items-center cursor-pointer">
-        <div id="progress-track" class="absolute left-0 right-0 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700"></div>
-        <div id="progress-bar" class="absolute left-0 h-1.5 rounded-full bg-brand-500" style="width:0%"></div>
-        <div id="progress-head" class="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-brand-500 shadow ring-2 ring-white dark:ring-slate-900" style="left:0%"></div>
-        <div id="markers-layer" class="absolute inset-0 pointer-events-none"></div>
+      <div class="mb-1.5 flex items-baseline justify-between gap-3">
+        <div id="time-display" class="font-mono text-xs tabular-nums text-muted">00:00 / 00:00</div>
+        <div id="marker-status" class="font-mono text-[11px] tabular-nums text-faint">no marks</div>
       </div>
 
-      <div id="controls-row" class="flex items-center gap-2 flex-wrap">
+      <div id="progress-container"
+        class="group relative flex h-12 w-full cursor-pointer touch-none items-end pb-1 select-none">
+        <div id="progress-track" class="absolute inset-x-0 top-1/2 z-0 h-1.5 -translate-y-1/2 rounded-full bg-line"></div>
+        <div id="ruler" aria-hidden="true"></div>
+        <div id="progress-bar" class="absolute left-0 top-1/2 z-2 h-1.5 -translate-y-1/2 rounded-full bg-accent" style="width:0%"></div>
+        <div id="markers-layer" class="pointer-events-none absolute inset-0"></div>
+        <div id="progress-head"
+          class="absolute top-1/2 z-5 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent shadow-[0_0_0_2px_rgb(var(--c-surface))] transition-transform"
+          style="left:0%"></div>
+      </div>
+
+      <div id="ruler-labels" class="relative h-4 font-mono text-[10px] tabular-nums text-faint" aria-hidden="true"></div>
+
+      <!-- Marking is the primary task, so it keeps the top row (and full width on
+           narrow screens); file actions collect on one row beneath. -->
+      <div id="controls-row" class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
         <div id="controls-left" class="flex gap-2">
-          <button class="ctrl-btn px-3 py-1.5 rounded-md text-xs font-medium border border-amber-300 text-amber-600
-                          hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40 transition-colors"
-                  onclick="clearMarkers()">✕ CLEAR</button>
-          <button class="ctrl-btn px-3 py-1.5 rounded-md text-xs font-medium border border-amber-300 text-amber-600
-                          hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40 transition-colors"
-                  onclick="undoMarker()">↩ UNDO</button>
+          <button class="btn btn-reel flex-1 sm:flex-none" onclick="markSegment('start')"><span class="font-mono text-sm leading-none">{</span> Mark in</button>
+          <button class="btn btn-reel flex-1 sm:flex-none" onclick="markSegment('end')"><span class="font-mono text-sm leading-none">}</span> Mark out</button>
         </div>
-
-        <div id="controls-center" class="flex-1 flex justify-center">
-          <button class="ctrl-btn px-4 py-1.5 rounded-md text-xs font-medium border border-slate-300 text-slate-600
-                          hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
-                  onclick="openRenameModal()">✎ RENAME</button>
-        </div>
-
-        <div id="controls-right" class="flex gap-2">
-          <button class="ctrl-btn px-3 py-1.5 rounded-md text-xs font-medium border border-brand-400 text-brand-600
-                          hover:bg-brand-50 dark:border-brand-500 dark:text-brand-400 dark:hover:bg-brand-950/40 transition-colors"
-                  onclick="markSegment('start')">{ Mark In</button>
-          <button class="ctrl-btn px-3 py-1.5 rounded-md text-xs font-medium border border-brand-400 text-brand-600
-                          hover:bg-brand-50 dark:border-brand-500 dark:text-brand-400 dark:hover:bg-brand-950/40 transition-colors"
-                  onclick="markSegment('end')">Mark Out }</button>
+        <div class="flex flex-1 flex-wrap gap-2 sm:flex-nowrap sm:justify-end">
+          <div id="controls-center" class="flex-1 sm:flex-none">
+            <button class="btn btn-quiet w-full" onclick="openRenameModal()"><span class="leading-none">✎</span> Rename</button>
+          </div>
+          <div id="controls-right" class="flex min-w-0 flex-1 gap-2 sm:flex-none">
+            <button class="btn btn-quiet min-w-0 flex-1 sm:flex-none" onclick="undoMarker()"><span class="leading-none">↩</span> Undo</button>
+            <button class="btn btn-quiet min-w-0 flex-1 sm:flex-none" onclick="clearMarkers()"><span class="leading-none">✕</span> Clear</button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
+  </main>
 </div>
 
-<!-- Rename Modal -->
-<div id="modal-overlay" class="hidden fixed inset-0 z-[1000] bg-black/60 items-center justify-center">
-  <div id="modal" class="w-[560px] max-w-[90vw] rounded-lg p-6 shadow-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-    <h3 class="text-sm font-semibold tracking-wide mb-4 text-slate-700 dark:text-slate-200">✎ RENAME VIDEO</h3>
-    <div id="modal-preview" class="text-xs text-slate-500 dark:text-slate-400 min-h-[20px] break-all"></div>
-    <div id="tag-list" class="grid grid-cols-4 gap-x-4 gap-y-2 my-4"></div>
-    <div id="modal-actions" class="flex justify-end gap-2">
-      <button id="modal-cancel-btn" onclick="closeModal()"
-        class="px-4 py-2 rounded-md text-xs font-medium border border-slate-300 text-slate-600
-               hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors">CANCEL</button>
-      <button id="modal-confirm-btn" onclick="doRename()"
-        class="px-4 py-2 rounded-md text-xs font-medium bg-brand-600 text-white hover:bg-brand-700 transition-colors">RENAME</button>
+<!-- ── Rename modal ──────────────────────────────────────── -->
+<div id="modal-overlay" class="fixed inset-0 z-[1000] hidden items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
+  <div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"
+    class="scroll-thin max-h-[88vh] w-[600px] max-w-full overflow-y-auto rounded-xl border border-line bg-surface p-5 shadow-2xl sm:p-6">
+    <h3 id="modal-title" class="text-[13px] font-bold uppercase tracking-[0.14em] text-ink">Rename clip</h3>
+    <p class="mt-1 text-[11px] text-faint">Pick a tag prefix. It is prepended to the current filename.</p>
+
+    <div id="modal-preview"
+      class="mt-4 break-all rounded-lg border border-line bg-raised px-3 py-2.5 font-mono text-xs text-muted"></div>
+
+    <div id="tag-list" class="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4"></div>
+
+    <div id="modal-actions" class="mt-6 flex justify-end gap-2">
+      <button id="modal-cancel-btn" onclick="closeModal()" class="btn btn-quiet">Cancel</button>
+      <button id="modal-confirm-btn" onclick="doRename()" class="btn border-accent bg-accent text-canvas hover:bg-accent/90">Rename</button>
     </div>
   </div>
 </div>
@@ -188,6 +379,10 @@ const playOverlay = document.getElementById('play-overlay');
 const modalOverlay = document.getElementById('modal-overlay');
 const modalPreview = document.getElementById('modal-preview');
 const tagListEl = document.getElementById('tag-list');
+const rulerEl = document.getElementById('ruler');
+const rulerLabels = document.getElementById('ruler-labels');
+const markerStatus = document.getElementById('marker-status');
+const loadingBar = document.getElementById('loading-bar');
 
 let markers = [];
 let pendingDeletes = new Set();
@@ -195,17 +390,20 @@ let isDragging = false;
 let currentFile = null;
 let selectedPrefix = '';
 let pendingRequests = 0;
+
 function pushLoading() {
   pendingRequests++;
-  console.log(`[loading] pendingRequests=${pendingRequests}`);
   document.getElementById('loading-indicator').classList.remove('hidden');
+  loadingBar.classList.remove('opacity-0');
+  loadingBar.classList.add('loading-pulse');
 }
 
 function popLoading() {
   pendingRequests = Math.max(0, pendingRequests - 1);
-  console.log(`[loading] pendingRequests=${pendingRequests}`);
   if (pendingRequests === 0) {
     document.getElementById('loading-indicator').classList.add('hidden');
+    loadingBar.classList.add('opacity-0');
+    loadingBar.classList.remove('loading-pulse');
   }
 }
 
@@ -218,9 +416,44 @@ function fmtTime(s) {
 }
 function pad(n) { return String(n).padStart(2,'0'); }
 
-function splitTags(prefix) {
-  // split on digit/letter boundaries: 1b2k -> ['1b','2k']
-  return (prefix.match(/(?:\d+[a-zA-Z_-]+|[a-zA-Z_-]+\d+)/g) || []);
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Replay names share a long prefix and only differ in the trailing date, so the
+// row shows that tail and carries the full name in the tooltip. Squeezing a
+// stub of the shared prefix in beside it only produced a ragged "…Coun".
+function nameParts(name) {
+  const KEEP = 22;
+  if (name.length <= KEEP + 2) return { head: '', tail: name };
+  return { head: '…', tail: name.slice(-KEEP) };
+}
+
+// ── Ruler ────────────────────────────────────────────────
+function renderRuler() {
+  rulerEl.innerHTML = '';
+  rulerLabels.innerHTML = '';
+  if (!player.duration) return;
+  const dur = player.duration;
+  for (let i = 0; i <= 50; i++) {
+    const major = i % 10 === 0;
+    const tick = document.createElement('div');
+    tick.className = 'ruler-tick' + (major ? ' major' : '');
+    tick.style.left = (i / 50 * 100) + '%';
+    tick.style.height = (major ? 9 : 5) + 'px';
+    tick.style.opacity = major ? '1' : '.55';
+    rulerEl.appendChild(tick);
+  }
+  for (let i = 0; i <= 4; i++) {
+    const label = document.createElement('span');
+    label.className = 'absolute -translate-x-1/2';
+    if (i === 0) label.className = 'absolute';
+    if (i === 4) label.className = 'absolute -translate-x-full';
+    label.style.left = (i / 4 * 100) + '%';
+    label.textContent = fmtTime(dur * i / 4);
+    rulerLabels.appendChild(label);
+  }
 }
 
 // ── Progress / Playback ───────────────────────────────────
@@ -230,9 +463,25 @@ function updateProgress() {
   progressBar.style.width = pct + '%';
   progressHead.style.left = pct + '%';
   timeDisplay.textContent = fmtTime(player.currentTime) + ' / ' + fmtTime(player.duration);
+  updateMarkerStatus();
 }
+
+function updateMarkerStatus() {
+  if (!currentFile) { markerStatus.textContent = 'no clip'; return; }
+  const starts = markers.filter(m => m.type === 'start').length;
+  const ends = markers.filter(m => m.type === 'end').length;
+  if (!markers.length) { markerStatus.textContent = 'no marks'; return; }
+  const n = Math.min(starts, ends);
+  const bits = [`${starts} in`, `${ends} out`];
+  if (n > 0) bits.push(`${n} segment${n > 1 ? 's' : ''}`);
+  markerStatus.textContent = bits.join(' · ');
+  markerStatus.classList.toggle('text-reel', true);
+}
+
 player.addEventListener('timeupdate', updateProgress);
-player.addEventListener('loadedmetadata', () => { updateProgress(); renderMarkers(); });
+player.addEventListener('loadedmetadata', () => {
+  updateProgress(); renderMarkers(); renderRuler(); updateMarkerStatus();
+});
 
 function togglePlay() {
   if (!player.src || !player.duration) return;
@@ -261,12 +510,13 @@ document.addEventListener('mousemove', e => { if (isDragging) seekTo(getPercent(
 document.addEventListener('mouseup', () => { isDragging = false; progressContainer.classList.remove('dragging'); });
 
 progressContainer.addEventListener('touchstart', e => {
-  isDragging = true; seekTo(getPercent(e.touches[0].clientX)); e.preventDefault();
+  isDragging = true; progressContainer.classList.add('dragging');
+  seekTo(getPercent(e.touches[0].clientX)); e.preventDefault();
 }, { passive: false });
 progressContainer.addEventListener('touchmove', e => {
   if (isDragging) seekTo(getPercent(e.touches[0].clientX)); e.preventDefault();
 }, { passive: false });
-progressContainer.addEventListener('touchend', () => { isDragging = false; });
+progressContainer.addEventListener('touchend', () => { isDragging = false; progressContainer.classList.remove('dragging'); });
 
 // ── Markers ───────────────────────────────────────────────
 function markSegment(type) {
@@ -278,17 +528,12 @@ function markSegment(type) {
   if (type === 'start') {
     let lastStartIdx = -1;
     for (let i = markers.length - 1; i >= 0; i--) {
-      if (markers[i].type === 'start' && markers[i].time < currentTime) {
-        lastStartIdx = i;
-        break;
-      }
+      if (markers[i].type === 'start' && markers[i].time < currentTime) { lastStartIdx = i; break; }
     }
-
     if (lastStartIdx !== -1) {
       const lastStartTime = markers[lastStartIdx].time;
       const hasEndBetween = markers.some(
-        m => m.type === 'end' && m.time > lastStartTime && m.time < currentTime
-      );
+        m => m.type === 'end' && m.time > lastStartTime && m.time < currentTime);
       console.log(`[markSegment] lastStartIdx=${lastStartIdx} lastStartTime=${lastStartTime.toFixed(3)} hasEndBetween=${hasEndBetween}`);
       if (!hasEndBetween) {
         console.log(`[markSegment] removing orphan start marker at index=${lastStartIdx} time=${lastStartTime.toFixed(3)}`);
@@ -298,17 +543,12 @@ function markSegment(type) {
   } else if (type === 'end') {
     let lastEndIdx = -1;
     for (let i = markers.length - 1; i >= 0; i--) {
-      if (markers[i].type === 'end' && markers[i].time < currentTime) {
-        lastEndIdx = i;
-        break;
-      }
+      if (markers[i].type === 'end' && markers[i].time < currentTime) { lastEndIdx = i; break; }
     }
-
     if (lastEndIdx !== -1) {
       const lastEndTime = markers[lastEndIdx].time;
       const hasStartBetween = markers.some(
-        m => m.type === 'start' && m.time > lastEndTime && m.time < currentTime
-      );
+        m => m.type === 'start' && m.time > lastEndTime && m.time < currentTime);
       console.log(`[markSegment] lastEndIdx=${lastEndIdx} lastEndTime=${lastEndTime.toFixed(3)} hasStartBetween=${hasStartBetween}`);
       if (!hasStartBetween) {
         console.log(`[markSegment] removing orphan end marker at index=${lastEndIdx} time=${lastEndTime.toFixed(3)}`);
@@ -341,6 +581,7 @@ function clearMarkers() {
 
 function renderMarkers() {
   markersLayer.innerHTML = '';
+  updateMarkerStatus();
   if (!player.duration) return;
   const dur = player.duration;
   const starts = markers.filter(m => m.type==='start').map(m=>m.time).sort((a,b)=>a-b);
@@ -407,26 +648,70 @@ function loadMarkersFromFile(filename) {
 
 // ── File list ─────────────────────────────────────────────
 let fileCache = [];
+let hasStaggered = false;
+
+function updateFooterCounts() {
+  const markedCount = fileCache.filter(f => f.has_json).length;
+  document.getElementById('archive-count').textContent = markedCount;
+  document.getElementById('purge-count').textContent = pendingDeletes.size;
+  deleteAllBtn.disabled = pendingDeletes.size === 0;
+  document.getElementById('lib-stats').textContent =
+    `${fileCache.length} clip${fileCache.length === 1 ? '' : 's'} · ${markedCount} marked`;
+}
 
 function renderFileList() {
   fileListEl.innerHTML = '';
-  fileCache.forEach(f => {
+  updateFooterCounts();
+
+  if (!fileCache.length) {
+    const empty = document.createElement('div');
+    empty.className = 'flex h-full flex-col items-center justify-center gap-2 px-6 text-center';
+    empty.innerHTML = `
+      <p class="text-xs font-semibold uppercase tracking-[0.18em] text-faint">Library is empty</p>
+      <p class="max-w-[30ch] text-[11px] leading-relaxed text-faint/70">
+        Drop <span class="font-mono">.mp4</span> files into the <span class="font-mono">data/</span> folder, then reload.
+      </p>`;
+    fileListEl.appendChild(empty);
+    return;
+  }
+
+  fileCache.forEach((f, i) => {
     const item = document.createElement('div');
-    item.className = 'file-item flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors';
+    item.className = 'file-item';
     item.dataset.name = f.name;
     if (f.name === currentFile) item.classList.add('active');
     if (pendingDeletes.has(f.name)) item.classList.add('pending-delete');
+    if (!hasStaggered) {
+      item.classList.add('row-enter');
+      if (i < 14) item.style.animationDelay = (i * 14) + 'ms';
+    }
 
-    const safe = f.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const parts = nameParts(f.name);
     item.innerHTML = `
-      ${f.has_json ? '<span class="has-json-icon text-brand-500 text-xs flex-shrink-0" title="Has markers">◈</span>' : '<span class="w-3 flex-shrink-0"></span>'}
-      <span class="file-name flex-1 min-w-0 text-sm text-slate-700 dark:text-slate-200 truncate" title="${f.name}">${f.name}</span>
-      <span class="file-dur text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap">${f.duration}</span>
-      <button class="trash-btn${pendingDeletes.has(f.name) ? ' marked' : ''} text-slate-400 hover:text-red-500 text-sm px-1 flex-shrink-0" title="Mark for deletion" onclick="event.stopPropagation();toggleDelete('${safe}',this)">🗑</button>
+      <span class="flex h-5 w-5 shrink-0 items-center justify-center" title="${f.has_json ? 'Has saved markers' : 'No markers yet'}">
+        ${f.has_json
+          ? '<svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-reel"><path fill="currentColor" d="M12 3l2.6 5.6L20.5 9.7l-4.3 4.2 1 6L12 17l-5.2 2.9 1-6L3.5 9.7l5.9-1.1z"/></svg>'
+          : '<span class="h-1.5 w-1.5 rounded-full bg-line"></span>'}
+      </span>
+      <span class="file-name min-w-0 flex-1" title="${esc(f.name)}"><span class="name-clip">${parts.head ? `<span class="name-head text-faint">${esc(parts.head)}</span>` : ''}<span class="name-tail">${esc(parts.tail)}</span></span></span>
+      <span class="file-dur shrink-0 font-mono text-[11px] tabular-nums text-faint">${esc(f.duration)}</span>
+      <button class="trash-btn${pendingDeletes.has(f.name) ? ' marked' : ''} shrink-0 rounded p-1.5"
+              title="${pendingDeletes.has(f.name) ? 'Unmark for deletion' : 'Mark for deletion'}"
+              aria-label="Mark ${esc(f.name)} for deletion">⌫</button>
     `;
+
+    // Bound as a listener rather than an inline handler: filenames are arbitrary
+    // strings, and splicing them into an onclick attribute is an injection hole.
+    const trashBtn = item.querySelector('.trash-btn');
+    trashBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      toggleDelete(f.name, trashBtn);
+    });
+
     item.addEventListener('click', () => loadFile(f.name));
     fileListEl.appendChild(item);
   });
+  hasStaggered = true;
 }
 
 function loadFileList() {
@@ -434,7 +719,6 @@ function loadFileList() {
   fetch('/files').then(r => r.json()).then(files => {
     fileCache = files;
     renderFileList();
-    deleteAllBtn.disabled = pendingDeletes.size === 0;
     console.log(`[loadFileList] loaded ${files.length} files`);
   }).catch(err => {
     console.error('[loadFileList] fetch error:', err);
@@ -451,17 +735,17 @@ function toggleDelete(filename, btn) {
   }
   console.log(`[toggleDelete] ${filename} pendingDeletes=`, Array.from(pendingDeletes));
   renderFileList();
-  deleteAllBtn.disabled = pendingDeletes.size === 0;
 }
 
 function confirmDeleteAll() {
   if (!pendingDeletes.size) return;
   const toDelete = Array.from(pendingDeletes);
-  if (!confirm(`Delete ${toDelete.length} file(s)\n\n${toDelete.join('\n')}`)) return;
+  if (!confirm(`Permanently delete ${toDelete.length} file(s)?\n\n${toDelete.join('\n')}`)) return;
 
+  const wasCurrent = currentFile && toDelete.includes(currentFile);
   fileCache = fileCache.filter(f => !pendingDeletes.has(f.name));
   pendingDeletes.clear();
-  deleteAllBtn.disabled = true;
+  if (wasCurrent) { currentFile = null; markers = []; resetPlayer(); }
   renderFileList();
   console.log(`[confirmDeleteAll] optimistic removal done, sending delete request`);
 
@@ -471,10 +755,8 @@ function confirmDeleteAll() {
     body: JSON.stringify({ files: toDelete })
   }).then(r => r.json()).then(d => {
     console.log('[confirmDeleteAll] server response:', d);
-    if (!d.ok) {
-      alert('Delete failed: ' + d.error);
-      loadFileList();
-    }
+    if (!d.ok) alert('Delete failed: ' + d.error);
+    loadFileList();
   }).catch(err => {
     console.error('[confirmDeleteAll] fetch error:', err);
     loadFileList();
@@ -506,6 +788,8 @@ function archiveMarkedVideos() {
       alert(`Archived ${d.archivedCount} video(s).` + (d.errors && d.errors.length ? `\n\n${d.errors.length} skipped/failed:\n` + d.errors.join('\n') : ''));
       if (currentFile && !fileCache.some(f => f.name === currentFile)) {
         currentFile = null;
+        markers = [];
+        resetPlayer();
       }
       loadFileList();
     } else {
@@ -519,23 +803,40 @@ function archiveMarkedVideos() {
   });
 }
 
+function resetPlayer() {
+  player.pause();
+  player.removeAttribute('src');
+  player.load();
+  player.classList.add('hidden');
+  document.getElementById('no-video').style.display = '';
+  progressBar.style.width = '0%';
+  progressHead.style.left = '0%';
+  timeDisplay.textContent = '00:00 / 00:00';
+  markersLayer.innerHTML = '';
+  rulerEl.innerHTML = '';
+  rulerLabels.innerHTML = '';
+  updateMarkerStatus();
+}
+
 function loadFile(filename) {
   currentFile = filename;
   markers = [];
   markersLayer.innerHTML = '';
   progressBar.style.width = '0%';
   progressHead.style.left = '0%';
+  timeDisplay.textContent = '00:00 / 00:00';
   document.getElementById('no-video').style.display = 'none';
   player.classList.remove('hidden');
   player.src = '/video/' + encodeURIComponent(filename);
   player.play();
   document.querySelectorAll('.file-item').forEach(el => el.classList.toggle('active', el.dataset.name===filename));
+  updateMarkerStatus();
   loadMarkersFromFile(filename);
 }
 
 // ── Rename Modal ──────────────────────────────────────────
 function openRenameModal() {
-  if (!currentFile) { alert('Please select a video file first'); return; }
+  if (!currentFile) { alert('Select a clip from the library first'); return; }
   selectedPrefix = '';
   renderTagChips();
   updateModalPreview('');
@@ -552,7 +853,7 @@ function updateModalPreview(prefix) {
   const dotIdx = currentFile.lastIndexOf('.');
   const ext = dotIdx !== -1 ? currentFile.slice(dotIdx) : '';
   const baseName = dotIdx !== -1 ? currentFile.slice(0, dotIdx) : currentFile;
-  modalPreview.textContent = '→ ' + (prefix || '') + baseName + ext;
+  modalPreview.innerHTML = `<span class="text-faint">→ </span><span class="text-accent font-bold">${esc(prefix || '')}</span>${esc(baseName + ext)}`;
 }
 
 async function renderTagChips() {
@@ -562,6 +863,9 @@ async function renderTagChips() {
     const data = await res.json();
     columns = data.columns || [];
   } catch {
+    columns = [];
+  }
+  if (!columns.length) {
     columns = [
       ['1d', '1v1', '2d', '1rd'],
       ['hs', 'funny', 'retard', 'knife', 'zues', 'loud', '1scouths'],
@@ -571,38 +875,36 @@ async function renderTagChips() {
       ['unclassified'],
     ];
   }
-  if (!columns.length) {
-    columns = [['1d', '1v1', '2d', '1rd'], ['hs', 'funny', 'retard', 'knife', 'zues', 'loud', '1scouths'], ['4k', '3k', '5k', '2k', '1k'], ['3hs', '2hs', '1v2', '1v3', '1v4'], ['1tap', 'fuckup', 'fastAwp'], ['unclassified']];
-  }
+  // The configured columns hold very different numbers of tags (4 vs 7), which
+  // rendered as a ragged block with dead space. Flatten to the configured order
+  // and let the grid balance the rows instead.
   tagListEl.innerHTML = '';
-  columns.forEach(col => {
-    const colDiv = document.createElement('div');
-    colDiv.className = 'flex flex-col gap-2';
-    col.forEach(tag => {
-      const chip = document.createElement('span');
-      chip.className = 'tag-chip px-4 py-2 rounded-lg text-sm cursor-pointer border text-center transition-colors select-none min-h-[44px] flex items-center justify-center font-medium ' +
-        (selectedPrefix.includes(tag)
-          ? 'bg-brand-500 text-white border-brand-500'
-          : 'border-brand-300 text-brand-600 hover:bg-brand-50 dark:border-brand-600 dark:text-brand-400 dark:hover:bg-brand-950/40');
-      chip.textContent = tag;
-      chip.onclick = () => {
-        if (selectedPrefix.includes(tag)) {
-          selectedPrefix = selectedPrefix.replace(tag, '');
-        } else {
-          selectedPrefix += tag;
-        }
-        updateModalPreview(selectedPrefix);
-        renderTagChips();
-      };
-      colDiv.appendChild(chip);
-    });
-    tagListEl.appendChild(colDiv);
+  columns.flat().forEach(tag => {
+    const on = selectedPrefix.includes(tag);
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip font-mono ' + (on ? 'tag-chip-on' : 'tag-chip-off border');
+    chip.textContent = tag;
+    chip.setAttribute('role', 'button');
+    chip.setAttribute('tabindex', '0');
+    chip.setAttribute('aria-pressed', String(on));
+    const pick = () => {
+      if (selectedPrefix.includes(tag)) {
+        selectedPrefix = selectedPrefix.replace(tag, '');
+      } else {
+        selectedPrefix += tag;
+      }
+      updateModalPreview(selectedPrefix);
+      renderTagChips();
+    };
+    chip.onclick = pick;
+    chip.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } };
+    tagListEl.appendChild(chip);
   });
 }
 
 function doRename() {
   const prefix = selectedPrefix.trim();
-  if (!prefix) { alert('Please select at least one tag'); return; }
+  if (!prefix) { alert('Select at least one tag'); return; }
   if (!currentFile) return;
 
   const dotIdx = currentFile.lastIndexOf('.');
@@ -615,12 +917,12 @@ function doRename() {
   const wasPlaying = !player.paused;
   const ct = player.currentTime;
 
-  const cacheIdx = fileCache.findIndex(f => f.name === currentFile);
+  const cacheIdx = fileCache.findIndex(f => f.name === originalName);
   if (cacheIdx !== -1) {
     fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: newName };
   }
-  if (pendingDeletes.has(currentFile)) {
-    pendingDeletes.delete(currentFile);
+  if (pendingDeletes.has(originalName)) {
+    pendingDeletes.delete(originalName);
     pendingDeletes.add(newName);
   }
   currentFile = newName;
@@ -645,13 +947,18 @@ function doRename() {
     } else {
       alert('Rename failed: ' + (d.error || ''));
       console.warn('[doRename] rolling back optimistic update');
+      // Roll back to the name captured before the optimistic update.
+      currentFile = originalName;
       if (cacheIdx !== -1) {
-        fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: currentFile };
+        fileCache[cacheIdx] = { ...fileCache[cacheIdx], name: originalName };
       }
       if (pendingDeletes.has(newName)) {
         pendingDeletes.delete(newName);
-        pendingDeletes.add(currentFile);
+        pendingDeletes.add(originalName);
       }
+      player.src = '/video/' + encodeURIComponent(originalName);
+      player.currentTime = ct;
+      if (wasPlaying) player.play();
       renderFileList();
     }
   }).catch(err => {
@@ -666,32 +973,31 @@ function doRename() {
 loadFileList();
 
 modalOverlay.addEventListener('click', e=>{ if(e.target===modalOverlay) closeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && modalOverlay.classList.contains('open')) closeModal();
+});
 
 // ── Theme Toggle ──────────────────────────────────────────
+function applyThemeGlyph() {
+  const isDark = document.documentElement.classList.contains('dark');
+  document.getElementById('theme-glyph').textContent = isDark ? '☾' : '☀';
+}
 (function() {
   const saved = localStorage.getItem('theme');
-  const btn = document.getElementById('theme-toggle');
-  if (saved === 'light') {
-    document.documentElement.classList.remove('dark');
-    btn.textContent = '☀ LIGHT';
-  } else {
-    document.documentElement.classList.add('dark');
-    btn.textContent = '🌙 DARK';
-  }
+  if (saved !== 'light') document.documentElement.classList.add('dark');
+  applyThemeGlyph();
 })();
 
 function toggleTheme() {
   const root = document.documentElement;
-  const btn = document.getElementById('theme-toggle');
   if (root.classList.contains('dark')) {
     root.classList.remove('dark');
     localStorage.setItem('theme', 'light');
-    btn.textContent = '☀ LIGHT';
   } else {
     root.classList.add('dark');
     localStorage.setItem('theme', 'dark');
-    btn.textContent = '🌙 DARK';
   }
+  applyThemeGlyph();
 }
 </script>
 </body>
